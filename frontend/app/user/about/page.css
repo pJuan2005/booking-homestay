@@ -1,0 +1,334 @@
+* {
+  box-sizing: border-box;
+}
+
+html {
+  font-size: 62.5%;
+}
+
+/* khôi phục font chữ */
+body {
+  font-size: 1.6rem;
+  font-family: "Inter", sans-serif;
+  margin: 0;
+}
+
+/* =====================common==================== */
+a {
+  text-decoration: none;
+}
+
+input,
+textarea,
+select,
+button {
+  font-family: inherit;
+  font-size: inherit;
+}
+
+input:focus {
+  outline: none;
+  border: 1px solid #0ea5e9;
+  border-bottom: none;
+  box-shadow: 0 0 0 2px rgba(14, 165, 233, 0.3);
+}
+/* ======================about==================== */
+
+.about-tag {
+  color: #93c5fd;
+  text-align: center;
+  font-size: 1.2rem;
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+.about-hero {
+  background: linear-gradient(135deg, #1e3a8a, #2563eb);
+  padding: 90px 196px;
+  text-align: center;
+  color: white;
+}
+
+.about-title {
+  font-size: 48px;
+  font-weight: 800;
+  margin-top: 10px;
+}
+
+.about-desc {
+  margin-top: 15px;
+  max-width: 600px;
+  margin-left: auto;
+  margin-right: auto;
+  color: #94a3b8;
+  text-align: center;
+  font-size: 1.7rem;
+  line-height: 1.75;
+}
+
+.about-actions {
+  margin-top: 25px;
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+}
+
+.btn-explore {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #2563eb;
+  color: white;
+  border: none;
+  padding: 10px 18px;
+  border-radius: 6px;
+  gap: 5px;
+  cursor: pointer;
+}
+
+.btn-host {
+  background: transparent;
+  border: 1px solid white;
+  color: white;
+  padding: 10px 18px;
+  border-radius: 6px;
+  cursor: pointer;
+  border-radius: 8px;
+  border: 0.889px solid rgba(255, 255, 255, 0.3);
+  background: rgba(255, 255, 255, 0.1);
+}
+
+/* stats */
+
+.about-stats {
+  background: #f8fafc;
+  padding: 40px 196px;
+}
+
+.stats-container {
+  display: flex;
+  justify-content: space-between;
+}
+
+.stats-box {
+  background: white;
+  border-radius: 10px;
+  padding: 25px;
+  width: 220px;
+  text-align: center;
+}
+
+.stats-icon {
+  border-radius: 14px;
+  background: #eff6ff;
+  width: 52px;
+  height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.stats-number {
+  margin-top: 12px;
+  font-size: 24px;
+  font-weight: 800;
+}
+
+.stats-desc {
+  margin-top: 5px;
+  color: #64748b;
+  text-align: center;
+  font-size: 1.4rem;
+  line-height: 1.5;
+  color: #64748b;
+  font-size: 14px;
+}
+
+/* mission */
+
+.about-mission {
+  padding: 80px 196px;
+}
+
+.mission-img {
+  width: 624px;
+  height: 420px;
+  border-radius: 20px;
+  object-fit: cover;
+}
+
+.mission-left {
+  width: 624px;
+  height: 420px;
+}
+
+.mission-tag {
+  border-radius: 8px;
+  background: #eff6ff;
+  width: 120px;
+  color: #2563eb;
+  padding: 4.556px 13.389px 7.444px 14px;
+  font-size: 1.3rem;
+  font-weight: 700;
+  line-height: 1.5;
+}
+
+.mission-container {
+  display: flex;
+  gap: 40px;
+  align-items: center;
+}
+
+.mission-title {
+  font-size: 32px;
+  font-weight: 800;
+  margin: 10px 0;
+}
+
+.mission-desc {
+  color: #64748b;
+  margin-bottom: 10px;
+}
+
+.mission-list {
+  margin-top: 10px;
+}
+
+/* values */
+
+.about-values {
+  padding: 80px 196px;
+  background: #f8fafc;
+  text-align: center;
+}
+
+.values-grid {
+  margin-top: 40px;
+  display: flex;
+  justify-content: space-between;
+}
+
+.value-box {
+  background: white;
+  padding: 25px;
+  width: 240px;
+  border-radius: 10px;
+}
+
+.icon-value {
+  border-radius: 14px;
+  background: #fef2f2;
+  width: 52px;
+  height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.value-title {
+  margin-top: 15px;
+  color: #1e293b;
+  font-size: 1.6rem;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.value-text {
+  margin-top: 10px;
+  color: #64748b;
+  font-size: 1.4rem;
+  line-height: 1.75;
+}
+
+/* how */
+
+.about-how {
+  padding: 80px 196px;
+  text-align: center;
+}
+
+.how-list {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 40px;
+}
+
+.how-step {
+  width: 200px;
+}
+
+.step-number {
+  font-weight: 800;
+  color: #2563eb;
+}
+
+/* team */
+
+.about-team {
+  padding: 80px 196px;
+  text-align: center;
+}
+
+.team-banner {
+  border-radius: 12px;
+  margin-top: 30px;
+}
+
+.team-members {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 30px;
+}
+
+.avatar {
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  background: #2563eb;
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  margin: auto;
+}
+
+.team-banner {
+  width: 1296px;
+  height: 320px;
+  object-fit: cover;
+}
+
+/* CTA */
+
+.about-cta {
+  background: linear-gradient(135deg, #1e3a8a, #2563eb);
+  padding: 80px;
+  text-align: center;
+  color: white;
+}
+
+.cta-buttons {
+  margin-top: 20px;
+}
+
+.cta-primary {
+  cursor: pointer;
+  background: white;
+  color: #2563eb;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 6px;
+  margin-right: 10px;
+}
+
+.cta-secondary {
+  cursor: pointer;
+  background: transparent;
+  border: 1px solid white;
+  color: white;
+  padding: 10px 20px;
+  border-radius: 6px;
+}

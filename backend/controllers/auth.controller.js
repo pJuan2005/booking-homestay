@@ -1,26 +1,39 @@
 var userModel = require("../models/user.model.js");
-function showLoginForm(req, res) {
-  if (req.currentUser) {
-    return res.redirect("/");
-  }
-  res.render("auth/login");
-}
 
 function handleLogin(req, res) {
   const email = req.body.email;
   const password = req.body.password;
+
   userModel.findByEmail(email, function (err, user) {
-    if (err) return res.render("auth/login", { error: "Lỗi phía server." });
-    else if (!user) {
-      return res.render("auth/login", { error: "Email không tồn tại!" });
-    } else if (user.password !== password) {
-      return res.render("auth/login", { error: "Mật khẩu sai!" });
-    } else if (user.password === password) {
-      req.session.user = {
-        id: user.id,
-        role: user.role,
-      };
-      return res.redirect("/");
+    if (err) {
+      return res.status(500).json({
+        message: "Lỗi phía server",
+      });
     }
+
+    if (!user) {
+      return res.status(400).json({
+        message: "Email không tồn tại",
+      });
+    }
+
+    if (user.password !== password) {
+      return res.status(400).json({
+        message: "Mật khẩu sai",
+      });
+    }
+
+    return res.json({
+      message: "Login success",
+      user: {
+        id: user.id,
+        email: user.email,
+        role: user.role,
+      },
+    });
   });
 }
+
+module.exports = {
+  handleLogin,
+};

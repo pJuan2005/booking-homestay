@@ -1,0 +1,197 @@
+.booking-container {
+  display: flex;
+  flex-direction: column;
+  gap: 25px;
+}
+
+/* TITLE */
+
+.booking-title h1 {
+  font-size: 22px;
+  font-weight: 700;
+}
+
+.booking-title p {
+  color: #64748b;
+}
+
+/* STATS */
+
+.booking-stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 20px;
+}
+
+.stat {
+  background: white;
+  padding: 18px;
+  border-radius: 10px;
+  text-align: center;
+}
+
+.stat.total {
+  color: #2563eb;
+}
+
+.stat.confirmed {
+  background: #dcfce7;
+}
+
+.stat.pending {
+  background: #fef3c7;
+}
+
+.stat.revenue {
+  background: #ede9fe;
+}
+
+/* FILTER */
+
+.booking-filter {
+  display: flex;
+  gap: 20px;
+  align-items: center;
+}
+
+.search-input {
+  flex: 1;
+  padding: 10px;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+}
+
+.filter-group {
+  display: flex;
+  gap: 10px;
+}
+
+.filter-btn {
+  padding: 6px 12px;
+  border: none;
+  border-radius: 20px;
+  background: #f1f5f9;
+  cursor: pointer;
+}
+
+.filter-btn.active {
+  background: #2563eb;
+  color: white;
+}
+
+/* TABLE */
+
+.booking-table {
+  background: white;
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+thead {
+  background: #f8fafc;
+}
+
+th {
+  padding: 12px;
+  font-size: 12px;
+  color: #64748b;
+  text-align: left;
+}
+
+td {
+  padding: 12px;
+  border-top: 1px solid #f1f5f9;
+}
+
+/* GUEST */
+
+.guest-info {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.avatar {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: #dbeafe;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+/* PROPERTY */
+
+.property-info {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+/* STATUS */
+
+.status {
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-size: 12px;
+}
+
+.status.confirmed {
+  background: #dcfce7;
+  color: #16a34a;
+}
+
+.status.pending {
+  background: #fef3c7;
+  color: #b45309;
+}
+
+.status.cancelled {
+  background: #fee2e2;
+  color: #dc2626;
+}
+
+/* ACTION */
+
+.btn-update {
+  border: none;
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: #e0f2fe;
+  cursor: pointer;
+}
+
+/* PAGINATION */
+
+.table-pagination {
+  display: flex;
+  justify-content: space-between;
+  padding: 15px;
+  border-top: 1px solid #f1f5f9;
+}
+
+.pagination-controls {
+  display: flex;
+  gap: 6px;
+}
+
+.page-btn,
+.page-number {
+  padding: 6px 10px;
+  border: 1px solid #e2e8f0;
+  background: white;
+  border-radius: 6px;
+}
+
+.page-number.active {
+  background: #2563eb;
+  color: white;
+}

@@ -1,0 +1,261 @@
+.manage-properties-container {
+  display: flex;
+  flex-direction: column;
+  gap: 25px;
+}
+
+/* TITLE */
+
+.properties-title h1 {
+  font-size: 22px;
+  font-weight: 700;
+}
+
+.properties-title p {
+  color: #64748b;
+}
+
+/* STATS */
+
+.properties-stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 20px;
+}
+
+.stat-card {
+  background: white;
+  padding: 18px;
+  border-radius: 10px;
+  text-align: center;
+}
+
+.stat-card h2 {
+  font-size: 22px;
+}
+
+.stat-card.total {
+  color: #2563eb;
+}
+
+.stat-card.approved {
+  background: #dcfce7;
+}
+
+.stat-card.pending {
+  background: #fef3c7;
+}
+
+.stat-card.rejected {
+  background: #fee2e2;
+}
+
+/* FILTER */
+
+.properties-filter {
+  display: flex;
+  gap: 20px;
+  align-items: center;
+}
+
+.search-input {
+  flex: 1;
+  padding: 10px;
+  border-radius: 6px;
+  border: 1px solid #e2e8f0;
+}
+
+.filter-group {
+  display: flex;
+  gap: 10px;
+}
+
+.filter-btn {
+  padding: 6px 12px;
+  border: none;
+  border-radius: 20px;
+  background: #f1f5f9;
+  cursor: pointer;
+}
+
+.filter-btn.active {
+  background: #2563eb;
+  color: white;
+}
+
+/* TABLE */
+
+.properties-table {
+  background: white;
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+thead {
+  background: #f8fafc;
+}
+
+th {
+  padding: 12px;
+  text-align: left;
+  font-size: 12px;
+  color: #64748b;
+}
+
+td {
+  padding: 12px;
+  border-top: 1px solid #f1f5f9;
+}
+
+/* PROPERTY */
+
+.property-info {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.property-img {
+  border-radius: 6px;
+}
+
+.property-name {
+  font-weight: 600;
+}
+
+.property-meta {
+  font-size: 12px;
+  color: #94a3b8;
+}
+
+/* TYPE */
+
+.type {
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-size: 12px;
+}
+
+.type.villa {
+  background: #e0f2fe;
+  color: #0369a1;
+}
+
+.type.cabin {
+  background: #ede9fe;
+  color: #6d28d9;
+}
+
+.type.studio {
+  background: #dcfce7;
+  color: #16a34a;
+}
+
+/* STATUS */
+
+.status {
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-size: 12px;
+}
+
+.status.approved {
+  background: #dcfce7;
+  color: #16a34a;
+}
+
+.status.pending {
+  background: #fef3c7;
+  color: #b45309;
+}
+
+.status.rejected {
+  background: #fee2e2;
+  color: #dc2626;
+}
+
+/* ACTIONS */
+
+.actions button {
+  border: none;
+  padding: 6px 8px;
+  border-radius: 6px;
+  margin-right: 5px;
+  cursor: pointer;
+}
+
+.btn-view {
+  background: #e0f2fe;
+}
+.btn-edit {
+  background: #ede9fe;
+}
+.btn-delete {
+  background: #fee2e2;
+}
+
+/* PAGINATION */
+
+.table-pagination {
+  display: flex;
+  justify-content: space-between;
+  padding: 15px;
+  border-top: 1px solid #f1f5f9;
+}
+
+.pagination-controls {
+  display: flex;
+  gap: 5px;
+}
+
+.page-btn,
+.page-number {
+  padding: 6px 10px;
+  border: 1px solid #e2e8f0;
+  background: white;
+  border-radius: 6px;
+}
+
+.page-number.active {
+  background: #2563eb;
+  color: white;
+}
+
+/* MODAL */
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.modal {
+  background: white;
+  padding: 24px;
+  border-radius: 10px;
+  width: 320px;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 15px;
+}
+
+.danger {
+  background: #ef4444;
+  color: white;
+  border: none;
+  padding: 6px 12px;
+  border-radius: 6px;
+}

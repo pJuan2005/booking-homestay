@@ -1,70 +1,96 @@
+"use client";
+
 import "./layout.css";
 import Image from "next/image";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
 
 export default function UserLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const pathname = usePathname();
+
+  const active = (path: string) =>
+    pathname === path ? "active" : "list-header";
+
   return (
     <>
       {/* HEADER */}
+
       <header>
-        <div className="header-left">
+        {/* LOGO */}
+
+        <Link href="/user" className="header-left">
           <div className="icon-home">
             <Image
-              src={"/img/icon-home.svg"}
+              src="/img/icon-home.svg"
               alt="icon-home"
               width={13}
               height={13}
             />
           </div>
+
           <p className="title-web">HomeStay</p>
-        </div>
+        </Link>
+
+        {/* MENU */}
+
         <div className="header-mid">
           <ul className="list-page">
             <li>
-              <a href="" className="active">
+              <Link href="/user" className={active("/user")}>
                 Home
-              </a>
+              </Link>
             </li>
+
             <li>
-              <a href="./user/explore" className="list-header">
+              <Link href="/user/explore" className={active("/user/explore")}>
                 Explore
-              </a>
+              </Link>
             </li>
+
             <li>
-              <a href="#!" className="list-header">
+              <Link href="/user/about" className={active("/user/about")}>
                 About
-              </a>
+              </Link>
             </li>
+
             <li>
-              <a href="#!" className="list-header">
+              <Link href="/user/contact" className={active("/user/contact")}>
                 Contact
-              </a>
+              </Link>
             </li>
           </ul>
         </div>
+
+        {/* RIGHT */}
+
         <div className="header-right">
-          <div className="btn btn-left">
+          <Link href="/user/login" className="btn btn-left">
             <Image
-              src={"/img/icon-logout.svg"}
+              src="/img/icon-logout.svg"
               alt="icon-user"
               width={14}
               height={14}
             />
+
             <p className="action-button">Log In</p>
-          </div>
-          <div className="btn btn-right">
-            <p className="action-button-right">Get Started</p>
-          </div>
+          </Link>
+
+          <Link href="/user/profile" className="btn btn-right">
+            <p className="action-button-right">Profile</p>
+          </Link>
         </div>
       </header>
 
       {/* PAGE CONTENT */}
+
       <main>{children}</main>
 
       {/* FOOTER */}
+
       <footer>
         <div className="footer-container">
           <div className="footer-top">

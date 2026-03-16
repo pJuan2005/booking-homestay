@@ -1,0 +1,158 @@
+.reports-container {
+  display: flex;
+  flex-direction: column;
+  gap: 25px;
+}
+
+.reports-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.export-btn {
+  border: 1px solid #2563eb;
+  color: #2563eb;
+  padding: 8px 14px;
+  border-radius: 6px;
+  background: white;
+}
+
+/* STATS */
+
+.reports-stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 20px;
+}
+
+.stat-card {
+  background: white;
+  padding: 18px;
+  border-radius: 10px;
+}
+
+.green {
+  color: #16a34a;
+  font-size: 12px;
+}
+
+/* GRID */
+
+.reports-grid {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 20px;
+}
+
+.right-charts {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.card {
+  background: white;
+  border-radius: 10px;
+  padding: 20px;
+}
+
+.large {
+  height: 300px;
+}
+
+/* CHARTS */
+
+.chart-placeholder {
+  height: 200px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #94a3b8;
+}
+
+.chart-circle {
+  height: 150px;
+  width: 150px;
+  border-radius: 50%;
+  background: #e2e8f0;
+  margin: auto;
+}
+
+/* BAR */
+
+.bar-chart {
+  display: flex;
+  align-items: flex-end;
+  gap: 15px;
+  height: 140px;
+  margin-top: 20px;
+}
+
+.bar-chart div {
+  width: 20px;
+  background: #2563eb;
+  border-radius: 4px;
+}
+
+/* HOSTS */
+
+.host-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 0;
+  border-top: 1px solid #f1f5f9;
+}
+
+.host-rank {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: #fbbf24;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+}
+
+.host-name {
+  font-weight: 600;
+}
+
+.host-revenue {
+  color: #16a34a;
+}
+
+/* TABLE */
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 15px;
+}
+
+th {
+  text-align: left;
+  font-size: 12px;
+  color: #64748b;
+  padding: 10px;
+}
+
+td {
+  padding: 10px;
+  border-top: 1px solid #f1f5f9;
+}
+
+.growth.up {
+  color: #16a34a;
+}
+
+.growth.down {
+  color: #dc2626;
+}
+
+canvas {
+  width: 100% !important;
+  height: 220px !important;
+}
