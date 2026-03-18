@@ -1,181 +1,151 @@
 "use client";
+// ============================================================
+// TARGET: frontend/app/host/dashboard/page.tsx
+// ============================================================
 
-import "./page.css";
-import Image from "next/image";
+import Link from "next/link";
+import { Building2, CalendarDays, DollarSign, TrendingUp, ArrowRight, Star } from "lucide-react";
+import { bookings, properties } from "@/lib/mockData";
+import { StatusBadge } from "@/components/shared/StatusBadge";
+import { useAuth } from "@/components/context/AuthContext";
 
-export default function HostDashboard() {
-  const bookings = [
-    {
-      guest: "Alice Johnson",
-      property: "Tropical Villa with Private Pool",
-      date: "2025-03-15 → 2025-03-20",
-      total: "$925",
-      status: "confirmed",
-      avatar: "AJ",
-    },
-    {
-      guest: "Bob Williams",
-      property: "Modern City Apartment – Skyline",
-      date: "2025-04-01 → 2025-04-05",
-      total: "$880",
-      status: "pending",
-      avatar: "BW",
-    },
-    {
-      guest: "Bob Williams",
-      property: "Charming Bali Bamboo House",
-      date: "2025-04-18 → 2025-04-22",
-      total: "$352",
-      status: "confirmed",
-      avatar: "BW",
-    },
-    {
-      guest: "Emma Wilson",
-      property: "Tropical Villa with Private Pool",
-      date: "2025-08-05 → 2025-08-10",
-      total: "$925",
-      status: "confirmed",
-      avatar: "EW",
-    },
-  ];
+export default function HostDashboardPage() {
+  const { user } = useAuth();
+  const displayName = user?.name || "Made Wijaya";
+  const firstName = displayName.split(" ")[0];
 
-  const properties = [
-    {
-      name: "Tropical Villa with Private Pool",
-      price: "$185/night",
-      img: "/img/property1.jpg",
-    },
-    {
-      name: "Modern City Apartment – Skyline View",
-      price: "$220/night",
-      img: "/img/property2.jpg",
-    },
-    {
-      name: "Charming Bali Bamboo House",
-      price: "$88/night",
-      img: "/img/property3.jpg",
-    },
+  // In a real app, hostId would come from the authenticated user's ID
+  const hostId = 2;
+  const hostProperties = properties.filter(p => p.hostId === hostId);
+  const hostBookings = bookings.filter(b => b.hostId === hostId);
+  const revenue = hostBookings.filter(b => b.status === "Confirmed").reduce((s, b) => s + b.totalPrice, 0);
+
+  const stats = [
+    { icon: <Building2 size={22} color="#2563EB" />, bg: "#eff6ff", label: "My Properties", value: hostProperties.length, change: "+1 this month" },
+    { icon: <CalendarDays size={22} color="#16a34a" />, bg: "#dcfce7", label: "Total Bookings", value: hostBookings.length, change: "+3 this week" },
+    { icon: <DollarSign size={22} color="#d97706" />, bg: "#fef3c7", label: "Total Revenue", value: `$${revenue.toLocaleString()}`, change: "+12% vs last month" },
+    { icon: <TrendingUp size={22} color="#7c3aed" />, bg: "#f3e8ff", label: "Avg. Rating", value: "4.8 ⭐", change: "Based on 47 reviews" },
   ];
 
   return (
-    <div className="dashboard">
-      {/* HEADER */}
-
-      <div className="dashboard-header">
-        <h1>Welcome back, Made! 👋</h1>
-        <p>Here's an overview of your hosting activity</p>
+    <div style={{ padding: "28px" }}>
+      <div style={{ marginBottom: 28 }}>
+        <h1 style={{ fontWeight: 800, color: "#1e293b", marginBottom: 4, fontSize: "1.5rem" }}>Welcome back, {firstName}! 👋</h1>
+        <p style={{ color: "#64748b", margin: 0 }}>Here's an overview of your hosting activity</p>
       </div>
 
-      {/* STATS */}
-
-      <div className="stats">
-        <div className="stat-card">
-          <p>My Properties</p>
-          <h2>3</h2>
-          <span className="green">↑ +1 this month</span>
-        </div>
-
-        <div className="stat-card">
-          <p>Total Bookings</p>
-          <h2>4</h2>
-          <span className="green">↑ +3 this week</span>
-        </div>
-
-        <div className="stat-card">
-          <p>Total Revenue</p>
-          <h2>$2,202</h2>
-          <span className="green">↑ +12% vs last month</span>
-        </div>
-
-        <div className="stat-card">
-          <p>Avg. Rating</p>
-          <h2>4.8 ⭐</h2>
-          <span className="green">↑ Based on 47 reviews</span>
-        </div>
-      </div>
-
-      {/* MAIN GRID */}
-
-      <div className="dashboard-grid">
-        {/* BOOKINGS */}
-
-        <div className="card">
-          <div className="card-header">
-            <h3>Recent Bookings</h3>
-            <a>View All →</a>
-          </div>
-
-          <table>
-            <thead>
-              <tr>
-                <th>Guest</th>
-                <th>Property</th>
-                <th>Dates</th>
-                <th>Total</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-
-            <tbody>
-              {bookings.map((b, i) => (
-                <tr key={i}>
-                  <td className="guest">
-                    <div className="avatar">{b.avatar}</div>
-
-                    <div>
-                      <p>{b.guest}</p>
-                      <span>2 guests</span>
-                    </div>
-                  </td>
-
-                  <td>{b.property}</td>
-
-                  <td>{b.date}</td>
-
-                  <td>{b.total}</td>
-
-                  <td>
-                    <span className={`status ${b.status}`}>{b.status}</span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-
-        {/* SIDEBAR */}
-
-        <div className="side">
-          {/* PROPERTIES */}
-
-          <div className="card">
-            <div className="card-header">
-              <h3>My Properties</h3>
-              <a>View All →</a>
-            </div>
-
-            {properties.map((p, i) => (
-              <div className="property" key={i}>
-                <Image src={p.img} alt="" width={50} height={50} />
-
+      {/* Stat Cards */}
+      <div className="row g-3 mb-4">
+        {stats.map((stat, i) => (
+          <div key={i} className="col-xl-3 col-md-6">
+            <div className="hs-stat-card">
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 }}>
                 <div>
-                  <p>{p.name}</p>
-                  <span>⭐ 4.9 · {p.price}</span>
+                  <div style={{ fontSize: "0.8rem", color: "#64748b", fontWeight: 600, marginBottom: 6 }}>{stat.label}</div>
+                  <div style={{ fontSize: "1.6rem", fontWeight: 800, color: "#1e293b" }}>{stat.value}</div>
                 </div>
-
-                <span className="approved">Approved</span>
+                <div className="hs-stat-icon" style={{ background: stat.bg }}>
+                  {stat.icon}
+                </div>
               </div>
-            ))}
+              <div style={{ fontSize: "0.77rem", color: "#16a34a", fontWeight: 600 }}>↑ {stat.change}</div>
+            </div>
+          </div>
+        ))}
+      </div>
 
-            <button className="add-btn">+ Add New Property</button>
+      <div className="row g-4">
+        {/* Recent Bookings */}
+        <div className="col-lg-8">
+          <div className="hs-card">
+            <div style={{ padding: "18px 20px", borderBottom: "1px solid #e2e8f0", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <h3 style={{ fontWeight: 700, color: "#1e293b", margin: 0, fontSize: "1rem" }}>Recent Bookings</h3>
+              <Link href="/host/manage-booking">
+                <button style={{ background: "none", border: "none", color: "#2563EB", fontSize: "0.83rem", fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", gap: 4 }}>
+                  View All <ArrowRight size={13} />
+                </button>
+              </Link>
+            </div>
+            <div style={{ overflowX: "auto" }}>
+              <table className="hs-table">
+                <thead>
+                  <tr>
+                    <th>Guest</th>
+                    <th>Property</th>
+                    <th>Dates</th>
+                    <th>Total</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {hostBookings.slice(0, 5).map(b => (
+                    <tr key={b.id}>
+                      <td>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                          <div style={{ width: 32, height: 32, borderRadius: "50%", background: "#eff6ff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "0.78rem", fontWeight: 700, color: "#2563EB" }}>
+                            {b.guestName.split(" ").map(w => w[0]).join("")}
+                          </div>
+                          <div>
+                            <div style={{ fontWeight: 600, color: "#1e293b", fontSize: "0.87rem" }}>{b.guestName}</div>
+                            <div style={{ color: "#94a3b8", fontSize: "0.76rem" }}>{b.guests} guests</div>
+                          </div>
+                        </div>
+                      </td>
+                      <td style={{ fontSize: "0.85rem", color: "#475569", maxWidth: 160 }}>
+                        <div style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{b.propertyTitle}</div>
+                      </td>
+                      <td style={{ fontSize: "0.82rem", color: "#64748b" }}>
+                        {b.checkIn} →<br />{b.checkOut}
+                      </td>
+                      <td><strong style={{ color: "#1e293b" }}>${b.totalPrice}</strong></td>
+                      <td><StatusBadge status={b.status} /></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        {/* My Properties Quick View */}
+        <div className="col-lg-4">
+          <div className="hs-card">
+            <div style={{ padding: "18px 20px", borderBottom: "1px solid #e2e8f0", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <h3 style={{ fontWeight: 700, color: "#1e293b", margin: 0, fontSize: "1rem" }}>My Properties</h3>
+              <Link href="/host/my-properties">
+                <button style={{ background: "none", border: "none", color: "#2563EB", fontSize: "0.83rem", fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", gap: 4 }}>
+                  View All <ArrowRight size={13} />
+                </button>
+              </Link>
+            </div>
+            <div>
+              {hostProperties.map(p => (
+                <div key={p.id} style={{ padding: "12px 18px", borderBottom: "1px solid #f1f5f9", display: "flex", alignItems: "center", gap: 10 }}>
+                  <img src={p.image} alt="" style={{ width: 46, height: 46, borderRadius: 8, objectFit: "cover" }} />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: 700, color: "#1e293b", fontSize: "0.85rem", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.title}</div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 3 }}>
+                      <Star size={11} fill="#f59e0b" color="#f59e0b" />
+                      <span style={{ fontSize: "0.77rem", color: "#64748b" }}>{p.rating} · ${p.price}/night</span>
+                    </div>
+                  </div>
+                  <StatusBadge status={p.status} />
+                </div>
+              ))}
+              <div style={{ padding: "14px 18px" }}>
+                <Link href="/host/add-property">
+                  <button className="btn-primary-hs" style={{ width: "100%", fontSize: "0.85rem" }}>
+                    + Add New Property
+                  </button>
+                </Link>
+              </div>
+            </div>
           </div>
 
-          {/* HOST TIPS */}
-
-          <div className="tips">
-            <h4>💡 Host Tips</h4>
-
-            <ul>
+          {/* Tips */}
+          <div style={{ marginTop: 16, padding: "16px 18px", background: "#eff6ff", borderRadius: 12, border: "1px solid #bfdbfe" }}>
+            <div style={{ fontWeight: 700, color: "#1e293b", marginBottom: 6, fontSize: "0.9rem" }}>💡 Host Tips</div>
+            <ul style={{ margin: 0, padding: "0 0 0 16px", color: "#475569", fontSize: "0.82rem", lineHeight: 1.9 }}>
               <li>Respond to bookings within 24 hours</li>
               <li>Update your calendar regularly</li>
               <li>Add high-quality photos to boost views</li>

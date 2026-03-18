@@ -1,257 +1,174 @@
 "use client";
+// ============================================================
+// TARGET: frontend/app/admin/dashboard/page.tsx
+// ============================================================
 
-import "./page.css";
+import Link from "next/link";
+import { Users, Building2, CalendarDays, DollarSign, ArrowRight, TrendingUp, CheckCircle, Clock } from "lucide-react";
 import {
-  Chart as ChartJS,
-  CategoryScale,
-  LinearScale,
-  PointElement,
-  LineElement,
-  BarElement,
-  Tooltip,
-  Legend,
-  Filler,
-} from "chart.js";
+  AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar
+} from "recharts";
+import { users, properties, bookings, monthlyRevenue } from "@/lib/mockData";
+import { StatusBadge } from "@/components/shared/StatusBadge";
 
-import { Line, Bar } from "react-chartjs-2";
+export default function AdminDashboardPage() {
+  const totalRevenue = bookings.filter(b => b.status === "Confirmed").reduce((s, b) => s + b.totalPrice, 0);
 
-ChartJS.register(
-  CategoryScale,
-  LinearScale,
-  PointElement,
-  LineElement,
-  BarElement,
-  Tooltip,
-  Legend,
-  Filler,
-);
+  const stats = [
+    { icon: <Users size={22} color="#2563EB" />, bg: "#eff6ff", label: "Total Users", value: users.length, sub: `${users.filter(u => u.role === "Guest").length} guests`, link: "/admin/user" },
+    { icon: <Building2 size={22} color="#7c3aed" />, bg: "#f3e8ff", label: "Total Hosts", value: users.filter(u => u.role === "Host").length, sub: `${properties.filter(p => p.status === "Pending").length} pending approval`, link: "/admin/property-approvals" },
+    { icon: <Building2 size={22} color="#16a34a" />, bg: "#dcfce7", label: "Properties", value: properties.length, sub: `${properties.filter(p => p.status === "Approved").length} approved`, link: "/admin/properties-manage" },
+    { icon: <DollarSign size={22} color="#d97706" />, bg: "#fef3c7", label: "Revenue", value: `$${totalRevenue.toLocaleString()}`, sub: "From confirmed bookings", link: "/admin/manage-reports" },
+  ];
 
-export default function AdminDashboard() {
-  /* ================= REVENUE CHART ================= */
-
-  const revenueData = {
-    labels: ["Aug", "Sep", "Oct", "Nov", "Dec", "Jan", "Feb"],
-    datasets: [
-      {
-        label: "Revenue",
-        data: [13000, 16000, 19000, 14000, 23000, 20000, 26000],
-        borderColor: "#2563eb",
-        backgroundColor: "rgba(37,99,235,0.15)",
-        tension: 0.4,
-        fill: true,
-        pointRadius: 0,
-      },
-    ],
-  };
-
-  const revenueOptions = {
-    responsive: true,
-    plugins: {
-      legend: { display: false },
-    },
-    scales: {
-      x: {
-        grid: {
-          color: "#f1f5f9",
-        },
-      },
-      y: {
-        grid: {
-          color: "#f1f5f9",
-        },
-        ticks: {
-          callback: (value: any) => "$" + value / 1000 + "k",
-        },
-      },
-    },
-  };
-
-  /* ================= BOOKING CHART ================= */
-
-  const bookingData = {
-    labels: ["Aug", "Sep", "Oct", "Nov", "Dec", "Jan", "Feb"],
-    datasets: [
-      {
-        data: [28, 35, 42, 31, 50, 45, 55],
-        backgroundColor: "#2563eb",
-        borderRadius: 6,
-      },
-    ],
-  };
-
-  const bookingOptions = {
-    responsive: true,
-    plugins: {
-      legend: { display: false },
-    },
-    scales: {
-      x: {
-        grid: { display: false },
-      },
-      y: {
-        grid: { color: "#f1f5f9" },
-      },
-    },
-  };
+  const recentBookings = bookings.slice(0, 6);
 
   return (
-    <div className="dashboard-container">
-      {/* TITLE */}
-      <div className="dashboard-title">
-        <h1>Admin Dashboard</h1>
-        <p>Platform overview and key metrics</p>
+    <div style={{ padding: "28px" }}>
+      <div style={{ marginBottom: 28 }}>
+        <h1 style={{ fontWeight: 800, color: "#1e293b", marginBottom: 4, fontSize: "1.5rem" }}>Admin Dashboard</h1>
+        <p style={{ color: "#64748b", margin: 0 }}>Platform overview and key metrics</p>
       </div>
 
-      {/* STATS */}
-      <div className="stats-grid">
-        <div className="stats-card">
-          <div>
-            <p className="stats-label">Total Users</p>
-            <h2>12</h2>
-            <span className="stats-desc">5 guests</span>
+      {/* Stat Cards */}
+      <div className="row g-3 mb-4">
+        {stats.map((stat, i) => (
+          <div key={i} className="col-xl-3 col-md-6">
+            <Link href={stat.link} style={{ textDecoration: "none" }}>
+              <div className="hs-stat-card" style={{ cursor: "pointer", transition: "all 0.2s" }}
+                onMouseEnter={e => (e.currentTarget.style.transform = "translateY(-2px)")}
+                onMouseLeave={e => (e.currentTarget.style.transform = "translateY(0)")}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 }}>
+                  <div>
+                    <div style={{ fontSize: "0.78rem", color: "#64748b", fontWeight: 600, marginBottom: 6 }}>{stat.label}</div>
+                    <div style={{ fontSize: "1.6rem", fontWeight: 800, color: "#1e293b" }}>{stat.value}</div>
+                  </div>
+                  <div className="hs-stat-icon" style={{ background: stat.bg }}>{stat.icon}</div>
+                </div>
+                <div style={{ fontSize: "0.77rem", color: "#64748b" }}>{stat.sub}</div>
+              </div>
+            </Link>
           </div>
-          <div className="stats-icon blue">👥</div>
+        ))}
+      </div>
+
+      {/* Charts */}
+      <div className="row g-4 mb-4">
+        {/* Revenue Chart */}
+        <div className="col-lg-8">
+          <div className="hs-card">
+            <div style={{ padding: "18px 20px", borderBottom: "1px solid #e2e8f0", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div>
+                <h3 style={{ fontWeight: 700, color: "#1e293b", margin: 0, fontSize: "1rem" }}>Revenue Trend</h3>
+                <div style={{ color: "#64748b", fontSize: "0.78rem", marginTop: 2 }}>Monthly revenue overview</div>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 6, background: "#dcfce7", borderRadius: 20, padding: "4px 10px" }}>
+                <TrendingUp size={12} color="#16a34a" />
+                <span style={{ fontSize: "0.78rem", color: "#16a34a", fontWeight: 700 }}>+24% this month</span>
+              </div>
+            </div>
+            <div style={{ padding: "20px" }}>
+              <ResponsiveContainer width="100%" height={240}>
+                <AreaChart data={monthlyRevenue}>
+                  <defs>
+                    <linearGradient id="revGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#2563EB" stopOpacity={0.15} />
+                      <stop offset="95%" stopColor="#2563EB" stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                  <XAxis dataKey="month" tick={{ fontSize: 12, fill: "#94a3b8" }} axisLine={false} tickLine={false} />
+                  <YAxis tick={{ fontSize: 12, fill: "#94a3b8" }} axisLine={false} tickLine={false} tickFormatter={v => `$${(v/1000).toFixed(0)}k`} />
+                  <Tooltip formatter={(v: number) => [`$${v.toLocaleString()}`, "Revenue"]} contentStyle={{ borderRadius: 8, border: "1px solid #e2e8f0", boxShadow: "0 4px 12px rgba(0,0,0,0.08)" }} />
+                  <Area type="monotone" dataKey="revenue" stroke="#2563EB" strokeWidth={2.5} fill="url(#revGrad)" />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
         </div>
 
-        <div className="stats-card">
-          <div>
-            <p className="stats-label">Total Hosts</p>
-            <h2>6</h2>
-            <span className="stats-desc">1 pending approval</span>
-          </div>
-          <div className="stats-icon purple">🏠</div>
-        </div>
+        {/* Quick Summary */}
+        <div className="col-lg-4">
+          <div className="hs-card" style={{ height: "100%" }}>
+            <div style={{ padding: "18px 20px", borderBottom: "1px solid #e2e8f0" }}>
+              <h3 style={{ fontWeight: 700, color: "#1e293b", margin: 0, fontSize: "1rem" }}>Platform Summary</h3>
+            </div>
+            <div style={{ padding: "20px" }}>
+              {[
+                { label: "Total Bookings", value: bookings.length, icon: <CalendarDays size={16} color="#2563EB" /> },
+                { label: "Confirmed", value: bookings.filter(b => b.status === "Confirmed").length, icon: <CheckCircle size={16} color="#16a34a" /> },
+                { label: "Pending", value: bookings.filter(b => b.status === "Pending").length, icon: <Clock size={16} color="#d97706" /> },
+                { label: "Active Users", value: users.filter(u => u.status === "Active").length, icon: <Users size={16} color="#7c3aed" /> },
+                { label: "Pending Approvals", value: properties.filter(p => p.status === "Pending").length, icon: <Building2 size={16} color="#dc2626" /> },
+              ].map((item, i) => (
+                <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 0", borderBottom: i < 4 ? "1px solid #f8fafc" : "none" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: "0.87rem", color: "#475569" }}>
+                    {item.icon} {item.label}
+                  </div>
+                  <span style={{ fontWeight: 800, color: "#1e293b" }}>{item.value}</span>
+                </div>
+              ))}
 
-        <div className="stats-card">
-          <div>
-            <p className="stats-label">Properties</p>
-            <h2>9</h2>
-            <span className="stats-desc">7 approved</span>
+              <Link href="/admin/property-approvals">
+                <button className="btn-primary-hs" style={{ width: "100%", marginTop: 16, fontSize: "0.85rem" }}>
+                  Review Pending Approvals
+                </button>
+              </Link>
+            </div>
           </div>
-          <div className="stats-icon green">📋</div>
-        </div>
-
-        <div className="stats-card">
-          <div>
-            <p className="stats-label">Revenue</p>
-            <h2>$4,442</h2>
-            <span className="stats-desc">From confirmed bookings</span>
-          </div>
-          <div className="stats-icon yellow">$</div>
         </div>
       </div>
 
-      {/* CHART + SUMMARY */}
-      <div className="dashboard-middle">
-        {/* REVENUE TREND */}
-        <div className="chart-card">
-          <div className="chart-header">
-            <div>
-              <h3>Revenue Trend</h3>
-              <p>Monthly revenue overview</p>
+      {/* Bookings Chart */}
+      <div className="row g-4 mb-4">
+        <div className="col-lg-6">
+          <div className="hs-card">
+            <div style={{ padding: "18px 20px", borderBottom: "1px solid #e2e8f0" }}>
+              <h3 style={{ fontWeight: 700, color: "#1e293b", margin: 0, fontSize: "1rem" }}>Monthly Bookings</h3>
             </div>
-
-            <span className="trend-badge">+24% this month</span>
-          </div>
-
-          <div className="chart-container">
-            <Line data={revenueData} options={revenueOptions} />
+            <div style={{ padding: "20px" }}>
+              <ResponsiveContainer width="100%" height={200}>
+                <BarChart data={monthlyRevenue}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                  <XAxis dataKey="month" tick={{ fontSize: 12, fill: "#94a3b8" }} axisLine={false} tickLine={false} />
+                  <YAxis tick={{ fontSize: 12, fill: "#94a3b8" }} axisLine={false} tickLine={false} />
+                  <Tooltip contentStyle={{ borderRadius: 8, border: "1px solid #e2e8f0" }} />
+                  <Bar dataKey="bookings" fill="#2563EB" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
           </div>
         </div>
 
-        {/* PLATFORM SUMMARY */}
-        <div className="summary-card">
-          <h3>Platform Summary</h3>
-
-          <div className="summary-item">
-            <span>Total Bookings</span>
-            <strong>8</strong>
-          </div>
-
-          <div className="summary-item">
-            <span>Confirmed</span>
-            <strong>4</strong>
-          </div>
-
-          <div className="summary-item">
-            <span>Pending</span>
-            <strong>3</strong>
-          </div>
-
-          <div className="summary-item">
-            <span>Active Users</span>
-            <strong>10</strong>
-          </div>
-
-          <div className="summary-item">
-            <span>Pending Approvals</span>
-            <strong>1</strong>
-          </div>
-
-          <button className="summary-btn">Review Pending Approvals</button>
-        </div>
-      </div>
-
-      {/* BOTTOM */}
-      <div className="dashboard-bottom">
-        {/* BOOKINGS CHART */}
-        <div className="booking-chart">
-          <h3>Monthly Bookings</h3>
-
-          <div className="chart-container">
-            <Bar data={bookingData} options={bookingOptions} />
-          </div>
-        </div>
-
-        {/* RECENT BOOKINGS */}
-        <div className="recent-bookings">
-          <div className="recent-header">
-            <h3>Recent Bookings</h3>
-            <a>View All</a>
-          </div>
-
-          <div className="booking-item">
-            <div className="booking-user">
-              <div className="avatar">AJ</div>
-              <div>
-                <p>Alice Johnson</p>
-                <span>2025-03-15 → 2025-03-20</span>
-              </div>
+        {/* Recent Bookings */}
+        <div className="col-lg-6">
+          <div className="hs-card">
+            <div style={{ padding: "18px 20px", borderBottom: "1px solid #e2e8f0", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <h3 style={{ fontWeight: 700, color: "#1e293b", margin: 0, fontSize: "1rem" }}>Recent Bookings</h3>
+              <Link href="/admin/manage-booking">
+                <button style={{ background: "none", border: "none", color: "#2563EB", fontSize: "0.83rem", fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", gap: 4 }}>
+                  View All <ArrowRight size={13} />
+                </button>
+              </Link>
             </div>
-
-            <div className="booking-right">
-              <strong>$925</strong>
-              <span className="status confirmed">Confirmed</span>
-            </div>
-          </div>
-
-          <div className="booking-item">
-            <div className="booking-user">
-              <div className="avatar">BW</div>
-              <div>
-                <p>Bob Williams</p>
-                <span>2025-04-01 → 2025-04-05</span>
-              </div>
-            </div>
-
-            <div className="booking-right">
-              <strong>$880</strong>
-              <span className="status pending">Pending</span>
-            </div>
-          </div>
-
-          <div className="booking-item">
-            <div className="booking-user">
-              <div className="avatar">CD</div>
-              <div>
-                <p>Carol Davis</p>
-                <span>2025-02-10 → 2025-02-14</span>
-              </div>
-            </div>
-
-            <div className="booking-right">
-              <strong>$520</strong>
-              <span className="status cancelled">Cancelled</span>
+            <div style={{ overflow: "hidden" }}>
+              {recentBookings.map(b => (
+                <div key={b.id} style={{ padding: "10px 18px", borderBottom: "1px solid #f8fafc", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <div style={{ width: 36, height: 36, borderRadius: 8, background: "#f1f5f9", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, color: "#2563EB", fontSize: "0.8rem" }}>
+                      {b.guestName.split(" ").map(w => w[0]).join("")}
+                    </div>
+                    <div>
+                      <div style={{ fontWeight: 600, color: "#1e293b", fontSize: "0.87rem" }}>{b.guestName}</div>
+                      <div style={{ color: "#94a3b8", fontSize: "0.75rem" }}>{b.checkIn} → {b.checkOut}</div>
+                    </div>
+                  </div>
+                  <div style={{ textAlign: "right" }}>
+                    <div style={{ fontWeight: 700, color: "#1e293b", fontSize: "0.9rem" }}>${b.totalPrice}</div>
+                    <StatusBadge status={b.status} />
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         </div>

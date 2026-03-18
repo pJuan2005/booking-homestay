@@ -359,3 +359,9 @@ VALUES
 (8,6,3,'Budget friendly'),
 (9,7,4,'Near beach'),
 (10,8,5,'Best penthouse');
+
+-- update sql
+ALTER TABLE properties 
+ADD featured BOOLEAN DEFAULT 0;
+
+UPDATE properties SET featured = 1 WHERE id IN (1,2,3);
