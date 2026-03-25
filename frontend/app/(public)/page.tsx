@@ -15,7 +15,7 @@ import {
   Star,
   Users,
 } from "lucide-react";
-import { destinations } from "@/lib/mockData";
+import { destinations } from "@/lib/destinations";
 import { PropertyCard } from "@/components/shared/PropertyCard";
 import { getProperties, type PropertySummary } from "@/services/propertyService";
 

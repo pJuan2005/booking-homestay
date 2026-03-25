@@ -36,6 +36,10 @@ interface AuthResponse {
   user: ApiAuthUser;
 }
 
+interface MessageResponse {
+  message: string;
+}
+
 function mapRole(role: string): AuthRole {
   const normalizedRole = String(role || "").trim().toLowerCase();
 
@@ -126,5 +130,36 @@ export async function getCurrentUser() {
 export async function logout() {
   return apiRequest<{ message: string }>("/api/auth/logout", {
     method: "POST",
+  });
+}
+
+export async function updateProfile(payload: {
+  fullName: string;
+  email: string;
+  phone: string;
+  location?: string;
+  website?: string;
+  languages?: string;
+  bio?: string;
+}) {
+  const response = await apiRequest<AuthResponse>("/api/auth/profile", {
+    method: "PUT",
+    body: JSON.stringify(payload),
+  });
+
+  return {
+    ...response,
+    user: mapAuthUser(response.user),
+  };
+}
+
+export async function changePassword(payload: {
+  currentPassword: string;
+  newPassword: string;
+  confirmPassword: string;
+}) {
+  return apiRequest<MessageResponse>("/api/auth/change-password", {
+    method: "PUT",
+    body: JSON.stringify(payload),
   });
 }

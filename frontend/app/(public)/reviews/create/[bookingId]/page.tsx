@@ -1,14 +1,21 @@
 "use client";
-import { useState } from "react";
+
+import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import {
-  Star, ArrowLeft, Send, CheckCircle, AlertTriangle,
-  MapPin, CalendarDays, Home
+  AlertTriangle,
+  ArrowLeft,
+  CalendarDays,
+  CheckCircle,
+  Home,
+  MapPin,
+  Send,
+  Star,
 } from "lucide-react";
-import { bookings } from "@/lib/mockData";
 import { useAuth, getUserInitials } from "@/components/context/AuthContext";
-// import { useReviews } from "@/components/context/ReviewContext";
+import { createReview } from "@/services/reviewService";
+import { getMyBookingById, type BookingRecord } from "@/services/bookingService";
 
 function StarRating({
   value,
@@ -19,9 +26,9 @@ function StarRating({
 }: {
   value: number;
   hovered: number;
-  onHover: (v: number) => void;
+  onHover: (value: number) => void;
   onLeave: () => void;
-  onClick: (v: number) => void;
+  onClick: (value: number) => void;
 }) {
   const labels = ["", "Poor", "Fair", "Good", "Very Good", "Excellent"];
   const active = hovered || value;
@@ -29,27 +36,26 @@ function StarRating({
   return (
     <div>
       <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
-        {[1, 2, 3, 4, 5].map(n => (
+        {[1, 2, 3, 4, 5].map((star) => (
           <button
-            key={n}
+            key={star}
             type="button"
-            onClick={() => onClick(n)}
-            onMouseEnter={() => onHover(n)}
+            onClick={() => onClick(star)}
+            onMouseEnter={() => onHover(star)}
             onMouseLeave={onLeave}
             style={{
               background: "none",
               border: "none",
-              padding: "2px",
+              padding: 2,
               cursor: "pointer",
               transition: "transform 0.12s",
-              transform: active >= n ? "scale(1.15)" : "scale(1)",
+              transform: active >= star ? "scale(1.15)" : "scale(1)",
             }}
           >
             <Star
               size={36}
-              fill={active >= n ? "#f59e0b" : "none"}
-              color={active >= n ? "#f59e0b" : "#d1d5db"}
-              style={{ transition: "all 0.12s" }}
+              fill={active >= star ? "#f59e0b" : "none"}
+              color={active >= star ? "#f59e0b" : "#d1d5db"}
             />
           </button>
         ))}
@@ -63,58 +69,148 @@ function StarRating({
   );
 }
 
-// Check if checkout date has already passed
-function isCheckoutPast(checkOutDate: string): boolean {
-  if(!checkOutDate) return false;
+function isCheckoutPast(checkOutDate: string) {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  const checkout = new Date(checkOutDate);
+
+  const checkout = new Date(`${checkOutDate}T00:00:00`);
   checkout.setHours(0, 0, 0, 0);
+
   return checkout < today;
 }
 
 export default function WriteReviewPage() {
   const { bookingId } = useParams();
   const router = useRouter();
-  const { user } = useAuth();
-  
-  // Dummy Review Context actions for now
-  const addReview = (r: any) => {};
-  const hasReview = (id: number) => false;
+  const { user, isInitializing } = useAuth();
 
+  const [booking, setBooking] = useState<BookingRecord | null>(null);
+  const [isLoadingBooking, setIsLoadingBooking] = useState(true);
   const [rating, setRating] = useState(0);
   const [hovered, setHovered] = useState(0);
   const [comment, setComment] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
-  const [errors, setErrors] = useState<{ rating?: string; comment?: string }>({});
+  const [pageError, setPageError] = useState("");
+  const [errors, setErrors] = useState<{ rating?: string; comment?: string }>(
+    {},
+  );
 
-  const bid = Number(bookingId);
-  const booking = bookings.find(b => b.id === bid);
+  const id = Number(bookingId);
 
-  // --- Eligibility Checks ---
+  useEffect(() => {
+    if (!isInitializing && (!user || user.role !== "Guest")) {
+      router.replace("/auth/login");
+    }
+  }, [isInitializing, router, user]);
+
+  useEffect(() => {
+    if (!isInitializing && user?.role === "Guest" && Number.isInteger(id) && id > 0) {
+      setIsLoadingBooking(true);
+      setPageError("");
+
+      getMyBookingById(id)
+        .then((data) => setBooking(data))
+        .catch((error) =>
+          setPageError(
+            error instanceof Error
+              ? error.message
+              : "Unable to load this booking right now.",
+          ),
+        )
+        .finally(() => setIsLoadingBooking(false));
+    }
+  }, [id, isInitializing, user]);
+
+  function validateReview() {
+    const nextErrors: { rating?: string; comment?: string } = {};
+
+    if (!rating) {
+      nextErrors.rating = "Please select a star rating.";
+    }
+
+    if (!comment.trim()) {
+      nextErrors.comment = "Please write a comment.";
+    } else if (comment.trim().length < 10) {
+      nextErrors.comment = "Comment must be at least 10 characters.";
+    }
+
+    setErrors(nextErrors);
+    return Object.keys(nextErrors).length === 0;
+  }
+
+  async function handleSubmit(event: React.FormEvent) {
+    event.preventDefault();
+
+    if (!booking || !validateReview()) {
+      return;
+    }
+
+    setIsSubmitting(true);
+    setPageError("");
+
+    try {
+      const response = await createReview({
+        bookingId: booking.id,
+        rating,
+        comment: comment.trim(),
+      });
+      setSubmitted(true);
+      setBooking({
+        ...booking,
+        reviewId: response.data.id,
+        reviewRating: response.data.rating,
+        reviewCreatedAt: response.data.date,
+      });
+    } catch (error) {
+      setPageError(
+        error instanceof Error
+          ? error.message
+          : "Unable to submit your review right now.",
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  if (isInitializing || !user || user.role !== "Guest" || isLoadingBooking) {
+    return (
+      <div style={{ minHeight: "70vh", display: "flex", alignItems: "center", justifyContent: "center", background: "#f8fafc", color: "#64748b" }}>
+        Loading your booking...
+      </div>
+    );
+  }
+
   if (!booking) {
     return (
       <div style={{ minHeight: "70vh", display: "flex", alignItems: "center", justifyContent: "center", background: "#f8fafc" }}>
-        <div className="hs-card" style={{ padding: "48px 36px", textAlign: "center", maxWidth: 420 }}>
+        <div className="hs-card" style={{ padding: "48px 36px", textAlign: "center", maxWidth: 460 }}>
           <AlertTriangle size={48} color="#f59e0b" style={{ marginBottom: 16 }} />
           <h2 style={{ color: "#1e293b", fontWeight: 700, marginBottom: 8 }}>Booking Not Found</h2>
-          <p style={{ color: "#64748b", marginBottom: 24 }}>We couldn't find this booking. Please check your booking history.</p>
-          <Link href="/dashboard"><button className="btn-primary-hs">Go to Dashboard</button></Link>
+          <p style={{ color: "#64748b", marginBottom: 24 }}>
+            {pageError || "We could not find this booking in your account."}
+          </p>
+          <Link href="/dashboard">
+            <button className="btn-primary-hs">Go to Dashboard</button>
+          </Link>
         </div>
       </div>
     );
   }
 
-  if (booking.status !== "Confirmed") {
+  if (booking.status !== "confirmed") {
     return (
       <div style={{ minHeight: "70vh", display: "flex", alignItems: "center", justifyContent: "center", background: "#f8fafc" }}>
-        <div className="hs-card" style={{ padding: "48px 36px", textAlign: "center", maxWidth: 420 }}>
+        <div className="hs-card" style={{ padding: "48px 36px", textAlign: "center", maxWidth: 460 }}>
           <AlertTriangle size={48} color="#f59e0b" style={{ marginBottom: 16 }} />
           <h2 style={{ color: "#1e293b", fontWeight: 700, marginBottom: 8 }}>Not Eligible to Review</h2>
           <p style={{ color: "#64748b", marginBottom: 24 }}>
-            Reviews can only be written for <strong>Confirmed</strong> bookings. This booking status is <strong>{booking.status}</strong>.
+            Only confirmed bookings can be reviewed. This booking is currently{" "}
+            <strong>{booking.status}</strong>.
           </p>
-          <Link href="/dashboard"><button className="btn-primary-hs">Back to Dashboard</button></Link>
+          <Link href="/dashboard">
+            <button className="btn-primary-hs">Back to Dashboard</button>
+          </Link>
         </div>
       </div>
     );
@@ -123,83 +219,66 @@ export default function WriteReviewPage() {
   if (!isCheckoutPast(booking.checkOut)) {
     return (
       <div style={{ minHeight: "70vh", display: "flex", alignItems: "center", justifyContent: "center", background: "#f8fafc" }}>
-        <div className="hs-card" style={{ padding: "48px 36px", textAlign: "center", maxWidth: 420 }}>
+        <div className="hs-card" style={{ padding: "48px 36px", textAlign: "center", maxWidth: 460 }}>
           <CalendarDays size={48} color="#2563EB" style={{ marginBottom: 16 }} />
           <h2 style={{ color: "#1e293b", fontWeight: 700, marginBottom: 8 }}>Your Stay Hasn't Ended Yet</h2>
           <p style={{ color: "#64748b", marginBottom: 24 }}>
-            You can write a review after your checkout date: <strong>{booking.checkOut}</strong>.
+            You can write a review after your checkout date:{" "}
+            <strong>{booking.checkOut}</strong>.
           </p>
-          <Link href="/dashboard"><button className="btn-primary-hs">Back to Dashboard</button></Link>
+          <Link href="/dashboard">
+            <button className="btn-primary-hs">Back to Dashboard</button>
+          </Link>
         </div>
       </div>
     );
   }
 
-  if (hasReview(bid)) {
+  if (booking.reviewId) {
     return (
       <div style={{ minHeight: "70vh", display: "flex", alignItems: "center", justifyContent: "center", background: "#f8fafc" }}>
-        <div className="hs-card" style={{ padding: "48px 36px", textAlign: "center", maxWidth: 420 }}>
+        <div className="hs-card" style={{ padding: "48px 36px", textAlign: "center", maxWidth: 460 }}>
           <CheckCircle size={48} color="#16a34a" style={{ marginBottom: 16 }} />
           <h2 style={{ color: "#1e293b", fontWeight: 700, marginBottom: 8 }}>Already Reviewed</h2>
           <p style={{ color: "#64748b", marginBottom: 24 }}>
-            You've already submitted a review for this stay. Thank you for your feedback!
+            You have already submitted a review for this stay. Thank you for your feedback.
           </p>
           <div style={{ display: "flex", gap: 10, justifyContent: "center", flexWrap: "wrap" }}>
-            <Link href="/dashboard"><button className="btn-primary-hs">My Dashboard</button></Link>
-            <Link href={`/listings/${booking.propertyId}`}><button className="btn-outline-hs">View Property</button></Link>
+            <Link href="/dashboard">
+              <button className="btn-primary-hs">My Dashboard</button>
+            </Link>
+            <Link href={`/listings/${booking.propertyId}`}>
+              <button className="btn-outline-hs">View Property</button>
+            </Link>
           </div>
         </div>
       </div>
     );
   }
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    const newErrors: typeof errors = {};
-    if (!rating) newErrors.rating = "Please select a star rating.";
-    if (!comment.trim()) newErrors.comment = "Please write a comment.";
-    else if (comment.trim().length < 10) newErrors.comment = "Comment must be at least 10 characters.";
-    if (Object.keys(newErrors).length > 0) {
-      setErrors(newErrors);
-      return;
-    }
-    const authorName = user ? `${user.name.split(" ")[0]} ${user.name.split(" ").slice(-1)[0]?.[0] || ""}.` : "Guest";
-    addReview({
-      bookingId: bid,
-      propertyId: booking.propertyId,
-      guestId: user?.id || 0,
-      authorName,
-      rating,
-      comment: comment.trim(),
-      date: new Date().toISOString().split("T")[0],
-    });
-    setSubmitted(true);
-  };
-
-  const displayName = user?.name || "Guest";
-  const initials = getUserInitials(displayName);
+  const initials = getUserInitials(user.name);
 
   if (submitted) {
     return (
       <div style={{ minHeight: "70vh", display: "flex", alignItems: "center", justifyContent: "center", background: "#f8fafc" }}>
-        <div className="hs-card" style={{ padding: "52px 40px", textAlign: "center", maxWidth: 460 }}>
-          <div style={{ fontSize: "3.5rem", marginBottom: 16 }}>🎉</div>
-          <h2 style={{ color: "#16a34a", fontWeight: 800, marginBottom: 8, fontSize: "1.5rem" }}>Review Submitted!</h2>
+        <div className="hs-card" style={{ padding: "52px 40px", textAlign: "center", maxWidth: 480 }}>
+          <div style={{ fontSize: "3rem", marginBottom: 16 }}>Thank you</div>
+          <h2 style={{ color: "#16a34a", fontWeight: 800, marginBottom: 8, fontSize: "1.5rem" }}>Review Submitted</h2>
           <p style={{ color: "#475569", marginBottom: 8 }}>
-            Thank you for reviewing <strong>{booking.propertyTitle}</strong>.
+            Your review for <strong>{booking.propertyTitle}</strong> has been saved.
           </p>
           <div style={{ display: "flex", gap: 3, justifyContent: "center", marginBottom: 24 }}>
-            {Array.from({ length: 5 }).map((_, i) => (
+            {Array.from({ length: 5 }).map((_, index) => (
               <Star
-                key={i}
+                key={index}
                 size={22}
-                fill={i < rating ? "#f59e0b" : "none"}
-                color={i < rating ? "#f59e0b" : "#e2e8f0"}
+                fill={index < rating ? "#f59e0b" : "none"}
+                color={index < rating ? "#f59e0b" : "#e2e8f0"}
               />
             ))}
           </div>
           <p style={{ color: "#64748b", fontSize: "0.88rem", marginBottom: 28, background: "#f8fafc", padding: "12px 16px", borderRadius: 10, fontStyle: "italic", border: "1px solid #e2e8f0" }}>
-            "{comment}"
+            "{comment.trim()}"
           </p>
           <div style={{ display: "flex", gap: 10, justifyContent: "center", flexWrap: "wrap" }}>
             <Link href="/dashboard">
@@ -216,8 +295,7 @@ export default function WriteReviewPage() {
 
   return (
     <div style={{ background: "#f8fafc", minHeight: "100vh", padding: "32px 0" }}>
-      <div className="container" style={{ maxWidth: 720 }}>
-        {/* Breadcrumb */}
+      <div className="container" style={{ maxWidth: 760 }}>
         <div style={{ marginBottom: 20, display: "flex", alignItems: "center", gap: 8, fontSize: "0.84rem" }}>
           <button
             onClick={() => router.back()}
@@ -226,22 +304,28 @@ export default function WriteReviewPage() {
             <ArrowLeft size={14} /> Back
           </button>
           <span style={{ color: "#94a3b8" }}>/</span>
-          <Link href="/dashboard" style={{ color: "#64748b", textDecoration: "none" }}>Dashboard</Link>
+          <Link href="/dashboard" style={{ color: "#64748b", textDecoration: "none" }}>
+            Dashboard
+          </Link>
           <span style={{ color: "#94a3b8" }}>/</span>
           <span style={{ color: "#1e293b", fontWeight: 600 }}>Write a Review</span>
         </div>
 
-        {/* Page Header */}
         <div style={{ marginBottom: 24 }}>
           <h1 style={{ fontWeight: 800, color: "#1e293b", fontSize: "1.6rem", marginBottom: 4 }}>
-            ✍️ Write a Review
+            Write a Review
           </h1>
           <p style={{ color: "#64748b", margin: 0, fontSize: "0.88rem" }}>
-            Share your experience to help other travelers make informed decisions.
+            Share your stay experience to help future guests make better decisions.
           </p>
         </div>
 
-        {/* Property Info Card */}
+        {pageError && (
+          <div style={{ marginBottom: 18, borderRadius: 12, padding: "12px 14px", border: "1px solid #fecaca", background: "#fef2f2", color: "#b91c1c", fontSize: "0.84rem" }}>
+            {pageError}
+          </div>
+        )}
+
         <div className="hs-card" style={{ padding: "18px 20px", marginBottom: 20, display: "flex", alignItems: "center", gap: 16 }}>
           <img
             src={booking.propertyImage}
@@ -261,36 +345,32 @@ export default function WriteReviewPage() {
                 {booking.checkIn} → {booking.checkOut}
               </span>
               <span style={{ fontSize: "0.78rem", color: "#64748b" }}>
-                {booking.nights} nights · {booking.guests} guest{booking.guests > 1 ? "s" : ""}
+                {booking.nights} nights • {booking.guests} guest{booking.guests > 1 ? "s" : ""}
               </span>
             </div>
           </div>
           <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4 }}>
-            <span style={{
-              background: "#dcfce7", color: "#16a34a",
-              fontSize: "0.75rem", fontWeight: 700, padding: "3px 10px", borderRadius: 20
-            }}>
-              ✓ Confirmed
+            <span style={{ background: "#dcfce7", color: "#16a34a", fontSize: "0.75rem", fontWeight: 700, padding: "3px 10px", borderRadius: 20 }}>
+              Confirmed
             </span>
-            <span style={{ fontWeight: 800, color: "#1e293b", fontSize: "0.95rem" }}>${booking.totalPrice}</span>
+            <span style={{ fontWeight: 800, color: "#1e293b", fontSize: "0.95rem" }}>
+              ${booking.totalPrice.toFixed(2)}
+            </span>
           </div>
         </div>
 
-        {/* Review Form Card */}
         <div className="hs-card" style={{ padding: "32px" }}>
-          {/* Author Info */}
           <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 28, padding: "16px 18px", background: "#f8fafc", borderRadius: 12, border: "1px solid #e2e8f0" }}>
-            <div style={{
-              width: 48, height: 48, borderRadius: "50%",
-              background: "linear-gradient(135deg, #2563EB, #7c3aed)",
-              display: "flex", alignItems: "center", justifyContent: "center",
-              fontSize: "1.1rem", fontWeight: 800, color: "#fff", flexShrink: 0
-            }}>
+            <div style={{ width: 48, height: 48, borderRadius: "50%", background: "linear-gradient(135deg, #2563EB, #7c3aed)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "1.1rem", fontWeight: 800, color: "#fff", flexShrink: 0 }}>
               {initials}
             </div>
             <div>
-              <div style={{ fontWeight: 700, color: "#1e293b", fontSize: "0.92rem" }}>Reviewing as {displayName}</div>
-              <div style={{ color: "#64748b", fontSize: "0.8rem" }}>Guest · Verified Booking</div>
+              <div style={{ fontWeight: 700, color: "#1e293b", fontSize: "0.92rem" }}>
+                Reviewing as {user.name}
+              </div>
+              <div style={{ color: "#64748b", fontSize: "0.8rem" }}>
+                Guest • Verified booking
+              </div>
             </div>
             <div style={{ marginLeft: "auto" }}>
               <span style={{ background: "#eff6ff", color: "#2563EB", fontSize: "0.75rem", fontWeight: 700, padding: "3px 10px", borderRadius: 20, display: "flex", alignItems: "center", gap: 4 }}>
@@ -300,7 +380,6 @@ export default function WriteReviewPage() {
           </div>
 
           <form onSubmit={handleSubmit}>
-            {/* Star Rating */}
             <div style={{ marginBottom: 28 }}>
               <label style={{ display: "block", fontWeight: 700, color: "#1e293b", marginBottom: 12, fontSize: "0.95rem" }}>
                 Overall Rating <span style={{ color: "#dc2626" }}>*</span>
@@ -310,9 +389,9 @@ export default function WriteReviewPage() {
                 hovered={hovered}
                 onHover={setHovered}
                 onLeave={() => setHovered(0)}
-                onClick={(v) => {
-                  setRating(v);
-                  setErrors(prev => ({ ...prev, rating: undefined }));
+                onClick={(value) => {
+                  setRating(value);
+                  setErrors((currentErrors) => ({ ...currentErrors, rating: undefined }));
                 }}
               />
               {errors.rating && (
@@ -322,31 +401,6 @@ export default function WriteReviewPage() {
               )}
             </div>
 
-            {/* Category Ratings (decorative) */}
-            <div style={{ marginBottom: 28, display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 12 }}>
-              {[
-                { label: "Cleanliness", defaultRating: 5 },
-                { label: "Location", defaultRating: 5 },
-                { label: "Communication", defaultRating: 4 },
-                { label: "Value for Money", defaultRating: 4 },
-              ].map((cat) => (
-                <div key={cat.label} style={{ background: "#f8fafc", borderRadius: 10, padding: "12px 14px", border: "1px solid #e2e8f0" }}>
-                  <div style={{ fontSize: "0.78rem", fontWeight: 600, color: "#64748b", marginBottom: 6 }}>{cat.label}</div>
-                  <div style={{ display: "flex", gap: 2 }}>
-                    {[1, 2, 3, 4, 5].map(n => (
-                      <Star
-                        key={n}
-                        size={14}
-                        fill={n <= (rating || cat.defaultRating) ? "#f59e0b" : "none"}
-                        color={n <= (rating || cat.defaultRating) ? "#f59e0b" : "#d1d5db"}
-                      />
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            {/* Comment */}
             <div style={{ marginBottom: 28 }}>
               <label style={{ display: "block", fontWeight: 700, color: "#1e293b", marginBottom: 8, fontSize: "0.95rem" }}>
                 Your Review <span style={{ color: "#dc2626" }}>*</span>
@@ -354,12 +408,15 @@ export default function WriteReviewPage() {
               <textarea
                 className="hs-form-control"
                 rows={5}
-                placeholder="Tell us about your experience — the property, host, location, and anything that stood out..."
+                placeholder="Tell us about the property, location, host support, and anything memorable about your stay..."
                 value={comment}
-                onChange={e => {
-                  setComment(e.target.value);
-                  if (e.target.value.trim().length >= 10) {
-                    setErrors(prev => ({ ...prev, comment: undefined }));
+                onChange={(event) => {
+                  setComment(event.target.value);
+                  if (event.target.value.trim().length >= 10) {
+                    setErrors((currentErrors) => ({
+                      ...currentErrors,
+                      comment: undefined,
+                    }));
                   }
                 }}
                 style={{
@@ -381,25 +438,27 @@ export default function WriteReviewPage() {
               </div>
             </div>
 
-            {/* Guidelines */}
             <div style={{ background: "#fffbeb", border: "1px solid #fde68a", borderRadius: 10, padding: "12px 16px", marginBottom: 24 }}>
-              <div style={{ fontWeight: 700, color: "#92400e", fontSize: "0.82rem", marginBottom: 6 }}>📋 Review Guidelines</div>
+              <div style={{ fontWeight: 700, color: "#92400e", fontSize: "0.82rem", marginBottom: 6 }}>
+                Review Guidelines
+              </div>
               <ul style={{ margin: 0, paddingLeft: 16, color: "#78350f", fontSize: "0.79rem", lineHeight: 1.7 }}>
-                <li>Be honest and share your genuine experience</li>
-                <li>Focus on the property, amenities, and host communication</li>
-                <li>Avoid personal attacks or inappropriate language</li>
-                <li>Reviews are submitted once and cannot be changed after 24 hours</li>
+                <li>Share your genuine experience and keep it constructive.</li>
+                <li>Focus on the property quality, location, and host communication.</li>
+                <li>Avoid offensive language or personal attacks.</li>
+                <li>Each confirmed stay can only be reviewed once.</li>
               </ul>
             </div>
 
-            {/* Actions */}
             <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
               <button
                 type="submit"
                 className="btn-primary-hs"
                 style={{ display: "flex", alignItems: "center", gap: 8, fontSize: "0.95rem" }}
+                disabled={isSubmitting}
               >
-                <Send size={15} /> Submit Review
+                <Send size={15} />
+                {isSubmitting ? "Submitting..." : "Submit Review"}
               </button>
               <button
                 type="button"

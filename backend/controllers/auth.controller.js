@@ -72,6 +72,43 @@ function validateRegisterPayload(body) {
   };
 }
 
+function validateProfilePayload(body) {
+  const errors = {};
+
+  const fullName = String(body.fullName || "").trim();
+  const email = normalizeEmail(body.email);
+  const phone = String(body.phone || "").trim();
+  const location = String(body.location || "").trim();
+  const website = String(body.website || "").trim();
+  const languages = String(body.languages || "").trim();
+  const bio = String(body.bio || "").trim();
+
+  if (!fullName) {
+    errors.fullName = "Full name is required";
+  }
+
+  if (!email || !email.includes("@")) {
+    errors.email = "Email is invalid";
+  }
+
+  if (!phone) {
+    errors.phone = "Phone number is required";
+  }
+
+  return {
+    errors,
+    payload: {
+      fullName,
+      email,
+      phone,
+      location,
+      website,
+      languages,
+      bio,
+    },
+  };
+}
+
 function isBcryptHash(value) {
   return /^\$2[aby]\$\d{2}\$/.test(String(value || ""));
 }
@@ -236,9 +273,112 @@ async function handleLogout(req, res) {
   });
 }
 
+async function handleUpdateProfile(req, res) {
+  if (!req.currentUser) {
+    return res.status(401).json({
+      message: "You are not logged in",
+    });
+  }
+
+  const { errors, payload } = validateProfilePayload(req.body);
+
+  if (Object.keys(errors).length > 0) {
+    return res.status(400).json({
+      message: "Profile payload is invalid",
+      errors,
+    });
+  }
+
+  try {
+    const existingUser = await User.findByEmail(payload.email);
+    if (existingUser && Number(existingUser.id) !== Number(req.currentUser.id)) {
+      return res.status(409).json({
+        message: "This email is already in use",
+      });
+    }
+
+    await User.updateProfile(req.currentUser.id, payload);
+    const updatedUser = await User.findById(req.currentUser.id);
+
+    return res.json({
+      message: "Profile updated successfully",
+      user: mapUserResponse(updatedUser),
+    });
+  } catch (_error) {
+    return res.status(500).json({
+      message: "Unable to update profile right now",
+    });
+  }
+}
+
+async function handleChangePassword(req, res) {
+  if (!req.currentUser) {
+    return res.status(401).json({
+      message: "You are not logged in",
+    });
+  }
+
+  const currentPassword = String(req.body.currentPassword || "");
+  const newPassword = String(req.body.newPassword || "");
+  const confirmPassword = String(req.body.confirmPassword || "");
+
+  if (!currentPassword || !newPassword || !confirmPassword) {
+    return res.status(400).json({
+      message: "Current password, new password, and confirmation are required",
+    });
+  }
+
+  if (newPassword.length < 6) {
+    return res.status(400).json({
+      message: "New password must be at least 6 characters",
+    });
+  }
+
+  if (newPassword !== confirmPassword) {
+    return res.status(400).json({
+      message: "Password confirmation does not match",
+    });
+  }
+
+  if (currentPassword === newPassword) {
+    return res.status(400).json({
+      message: "New password must be different from the current password",
+    });
+  }
+
+  try {
+    const user = await User.findById(req.currentUser.id);
+    if (!user) {
+      return res.status(404).json({
+        message: "User not found",
+      });
+    }
+
+    const isValidPassword = await verifyPassword(user, currentPassword);
+    if (!isValidPassword) {
+      return res.status(400).json({
+        message: "Current password is incorrect",
+      });
+    }
+
+    const hashedPassword = await bcrypt.hash(newPassword, SALT_ROUNDS);
+    await User.updatePassword(user.id, hashedPassword);
+
+    return res.json({
+      message: "Password updated successfully",
+    });
+  } catch (_error) {
+    return res.status(500).json({
+      message: "Unable to update password right now",
+    });
+  }
+}
+
 module.exports = {
   handleRegister,
   handleLogin,
   handleMe,
   handleLogout,
+  handleUpdateProfile,
+  handleChangePassword,
 };

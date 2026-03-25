@@ -1,19 +1,37 @@
 "use client";
-import { useEffect, useState } from "react";
+
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
-  User, Mail, Phone, MapPin, CalendarDays, Clock, Edit2,
-  Search, Filter, ExternalLink, Star, LogOut, Home, CheckCircle
+  CalendarDays,
+  CreditCard,
+  ExternalLink,
+  Filter,
+  Home,
+  LogOut,
+  Mail,
+  MapPin,
+  MessageCircle,
+  Phone,
+  Search,
+  Star,
+  User,
 } from "lucide-react";
-import { bookings } from "@/lib/mockData";
-import { StatusBadge } from "@/components/shared/StatusBadge";
 import { useAuth, getUserInitials } from "@/components/context/AuthContext";
-// Assuming ReviewContext logic might be added later, commenting out for now if not available
-// import { useReviews } from "@/components/context/ReviewContext";
+import { AccountSettingsPanel } from "@/components/shared/AccountSettingsPanel";
+import { BookingChatDialog } from "@/components/shared/BookingChatDialog";
+import { StatusBadge } from "@/components/shared/StatusBadge";
+import { PaymentStatusBadge } from "@/components/shared/PaymentStatusBadge";
+import { PaymentInstructionsCard } from "@/components/shared/PaymentInstructionsCard";
+import {
+  cancelBooking,
+  getMyBookings,
+  uploadPaymentProof,
+  type BookingRecord,
+} from "@/services/bookingService";
 
-// Check if checkout date has already passed
-function isCheckoutPast(checkOutDate: string): boolean {
+function isCheckoutPast(checkOutDate: string) {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const checkout = new Date(checkOutDate);
@@ -24,56 +42,126 @@ function isCheckoutPast(checkOutDate: string): boolean {
 export default function UserDashboard() {
   const { user, logout, isInitializing } = useAuth();
   const router = useRouter();
-  // const { hasReview } = useReviews(); // Placeholder
-  const hasReview = (id: number) => false; // Dummy implementation
 
   const [activeTab, setActiveTab] = useState<"bookings" | "profile">("bookings");
-  const [cancelConfirm, setCancelConfirm] = useState<number | null>(null);
+  const [bookings, setBookings] = useState<BookingRecord[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [searchValue, setSearchValue] = useState("");
+  const [selectedBooking, setSelectedBooking] = useState<BookingRecord | null>(null);
+  const [chatBooking, setChatBooking] = useState<BookingRecord | null>(null);
+  const [pageError, setPageError] = useState("");
+  const [pageMessage, setPageMessage] = useState("");
+  const [isUploadingProof, setIsUploadingProof] = useState(false);
+  const [isCancellingBooking, setIsCancellingBooking] = useState<number | null>(null);
 
-  // Use real user's bookings if found in mock data, otherwise show all guest bookings as demo
-  const userBookings = bookings.filter(b =>
-    user ? (b.guestName.toLowerCase().includes(user.name.split(" ")[0].toLowerCase()) || b.guestId === user.id) : b.guestId === 6
-  );
+  async function loadBookings() {
+    setIsLoading(true);
+    setPageError("");
 
-  const [bookingList, setBookingList] = useState(userBookings.length > 0 ? userBookings : bookings.filter(b => b.guestId === 6));
-  const [statusFilter, setStatusFilter] = useState("All");
-  const [profileForm, setProfileForm] = useState({
-    name: user?.name || "Alice Johnson",
-    email: user?.email || "alice@example.com",
-    phone: "+1 (415) 555-0142",
-    location: "San Francisco, CA",
-    bio: "Passionate traveler exploring the world one homestay at a time. Love authentic local experiences.",
-  });
-  const [profileSaved, setProfileSaved] = useState(false);
+    try {
+      const data = await getMyBookings();
+      setBookings(data);
+    } catch (error) {
+      setPageError(
+        error instanceof Error
+          ? error.message
+          : "Unable to load your booking history right now.",
+      );
+    } finally {
+      setIsLoading(false);
+    }
+  }
 
-  const filtered = statusFilter === "All" ? bookingList : bookingList.filter(b => b.status === statusFilter);
-
-  const handleCancel = (id: number) => {
-    setBookingList(prev => prev.map(b => b.id === id ? { ...b, status: "Cancelled" as const } : b));
-    setCancelConfirm(null);
-  };
-
-  const handleLogout = async () => {
-    await logout();
-    router.push("/");
-  };
-
-  const handleSaveProfile = (e: React.FormEvent) => {
-    e.preventDefault();
-    setProfileSaved(true);
-    setTimeout(() => setProfileSaved(false), 2500);
-  };
-
-  const displayName = user?.name || "Alice Johnson";
-  const displayEmail = user?.email || "alice@example.com";
-  const initials = getUserInitials(displayName);
-  const memberSince = user?.joined ? new Date(user.joined).toLocaleDateString("en-US", { month: "long", year: "numeric" }) : "January 2024";
+  useEffect(() => {
+    if (!isInitializing && user?.role === "Guest") {
+      loadBookings();
+    }
+  }, [isInitializing, user]);
 
   useEffect(() => {
     if (!isInitializing && (!user || user.role !== "Guest")) {
       router.replace("/auth/login");
     }
   }, [isInitializing, router, user]);
+
+  const filteredBookings = useMemo(
+    () =>
+      bookings.filter((booking) => {
+        const matchesStatus =
+          statusFilter === "all" || booking.status === statusFilter;
+        const keyword = searchValue.trim().toLowerCase();
+        const matchesSearch =
+          !keyword ||
+          booking.propertyTitle.toLowerCase().includes(keyword) ||
+          booking.hostName.toLowerCase().includes(keyword) ||
+          booking.bookingCode.toLowerCase().includes(keyword);
+
+        return matchesStatus && matchesSearch;
+      }),
+    [bookings, searchValue, statusFilter],
+  );
+
+  async function handleLogout() {
+    await logout();
+    router.push("/");
+  }
+
+  async function handleUploadProof(file: File) {
+    if (!selectedBooking) {
+      return;
+    }
+
+    setIsUploadingProof(true);
+    setPageError("");
+    setPageMessage("");
+
+    try {
+      const response = await uploadPaymentProof(selectedBooking.id, file);
+      setBookings((currentBookings) =>
+        currentBookings.map((booking) =>
+          booking.id === response.data.id ? response.data : booking,
+        ),
+      );
+      setSelectedBooking(response.data);
+      setPageMessage(response.message);
+    } catch (error) {
+      setPageError(
+        error instanceof Error
+          ? error.message
+          : "Unable to upload your payment proof right now.",
+      );
+    } finally {
+      setIsUploadingProof(false);
+    }
+  }
+
+  async function handleCancelBooking(booking: BookingRecord) {
+    setIsCancellingBooking(booking.id);
+    setPageError("");
+    setPageMessage("");
+
+    try {
+      const response = await cancelBooking(booking.id);
+      setBookings((currentBookings) =>
+        currentBookings.map((currentBooking) =>
+          currentBooking.id === response.data.id ? response.data : currentBooking,
+        ),
+      );
+      if (selectedBooking?.id === response.data.id) {
+        setSelectedBooking(response.data);
+      }
+      setPageMessage(response.message);
+    } catch (error) {
+      setPageError(
+        error instanceof Error
+          ? error.message
+          : "Unable to cancel this booking right now.",
+      );
+    } finally {
+      setIsCancellingBooking(null);
+    }
+  }
 
   if (isInitializing || !user || user.role !== "Guest") {
     return (
@@ -83,15 +171,25 @@ export default function UserDashboard() {
     );
   }
 
+  const initials = getUserInitials(user.name);
+  const memberSince = user.joined
+    ? new Date(user.joined).toLocaleDateString("en-US", { month: "long", year: "numeric" })
+    : "January 2026";
+  const stats = [
+    { label: "Total bookings", value: bookings.length, color: "#1e293b" },
+    { label: "Confirmed", value: bookings.filter((booking) => booking.status === "confirmed").length, color: "#16a34a" },
+    { label: "Pending", value: bookings.filter((booking) => booking.status === "pending").length, color: "#d97706" },
+    { label: "Awaiting review", value: bookings.filter((booking) => booking.paymentStatus === "proof_uploaded").length, color: "#2563eb" },
+  ];
+
   return (
     <div style={{ background: "#f8fafc", minHeight: "100vh", padding: "32px 0" }}>
       <div className="container">
-        {/* Page Header */}
-        <div style={{ marginBottom: 28, display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
+        <div style={{ marginBottom: 28, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
           <div>
             <h1 style={{ fontWeight: 800, color: "#1e293b", marginBottom: 4, fontSize: "1.5rem" }}>My Dashboard</h1>
             <p style={{ color: "#64748b", margin: 0, fontSize: "0.88rem" }}>
-              Welcome back, <strong>{displayName.split(" ")[0]}</strong>! Manage your bookings and account settings.
+              Track bookings, transfer proofs, and check-in updates in one place.
             </p>
           </div>
           <Link href="/listings">
@@ -101,203 +199,134 @@ export default function UserDashboard() {
           </Link>
         </div>
 
+        {(pageError || pageMessage) && (
+          <div style={{ marginBottom: 20, borderRadius: 14, padding: "14px 16px", border: `1px solid ${pageError ? "#fecaca" : "#bbf7d0"}`, background: pageError ? "#fef2f2" : "#f0fdf4", color: pageError ? "#b91c1c" : "#166534", fontSize: "0.85rem" }}>
+            {pageError || pageMessage}
+          </div>
+        )}
+
         <div className="row g-4">
-          {/* Sidebar Profile */}
           <div className="col-lg-3 col-md-4">
             <div className="hs-card" style={{ padding: "28px 20px", textAlign: "center" }}>
-              <div style={{
-                width: 80, height: 80, borderRadius: "50%",
-                background: "linear-gradient(135deg, #2563EB, #7c3aed)",
-                display: "flex", alignItems: "center", justifyContent: "center",
-                margin: "0 auto 14px", fontSize: "1.8rem", fontWeight: 800, color: "#fff"
-              }}>
+              <div style={{ width: 80, height: 80, borderRadius: "50%", background: "linear-gradient(135deg, #2563EB, #7c3aed)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 14px", fontSize: "1.8rem", fontWeight: 800, color: "#fff" }}>
                 {initials}
               </div>
-              <h2 style={{ fontWeight: 700, color: "#1e293b", marginBottom: 4, fontSize: "1.1rem" }}>{displayName}</h2>
-              <p style={{ color: "#64748b", fontSize: "0.83rem", marginBottom: 14 }}>{displayEmail}</p>
+              <h2 style={{ fontWeight: 700, color: "#1e293b", marginBottom: 4, fontSize: "1.1rem" }}>{user.name}</h2>
+              <p style={{ color: "#64748b", fontSize: "0.83rem", marginBottom: 14 }}>{user.email}</p>
               <span className="hs-badge hs-badge-guest" style={{ display: "inline-flex" }}>
                 <User size={11} style={{ marginRight: 4 }} /> Guest
               </span>
-
-              <div style={{ borderTop: "1px solid #e2e8f0", marginTop: 18, paddingTop: 18 }}>
-                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                  {[
-                    { icon: <Mail size={14} />, text: displayEmail },
-                    { icon: <Phone size={14} />, text: "+1 (415) 555-0142" },
-                    { icon: <MapPin size={14} />, text: "San Francisco, CA" },
-                    { icon: <CalendarDays size={14} />, text: `Member since ${memberSince}` },
-                  ].map((item, i) => (
-                    <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: "0.8rem", color: "#64748b" }}>
-                      <span style={{ color: "#2563EB" }}>{item.icon}</span>
-                      <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.text}</span>
-                    </div>
-                  ))}
-                </div>
+              <div style={{ borderTop: "1px solid #e2e8f0", marginTop: 18, paddingTop: 18, display: "flex", flexDirection: "column", gap: 10, textAlign: "left" }}>
+                {[
+                  { icon: <Mail size={14} />, text: user.email },
+                  { icon: <Phone size={14} />, text: user.phone || "Not updated yet" },
+                  { icon: <MapPin size={14} />, text: user.location || "Not updated yet" },
+                  { icon: <CalendarDays size={14} />, text: `Member since ${memberSince}` },
+                ].map((item, index) => (
+                  <div key={index} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: "0.8rem", color: "#64748b" }}>
+                    <span style={{ color: "#2563EB" }}>{item.icon}</span>
+                    <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.text}</span>
+                  </div>
+                ))}
               </div>
-
-              <button
-                className="btn-outline-hs"
-                style={{ width: "100%", marginTop: 18, fontSize: "0.85rem", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}
-                onClick={() => setActiveTab("profile")}
-              >
-                <Edit2 size={13} /> Edit Profile
-              </button>
             </div>
 
-            {/* Quick Stats */}
             <div className="hs-card" style={{ padding: "18px 20px", marginTop: 16 }}>
-              <div style={{ fontSize: "0.72rem", fontWeight: 700, color: "#94a3b8", letterSpacing: 0.8, textTransform: "uppercase", marginBottom: 12 }}>My Stats</div>
-              {[
-                { label: "Total Bookings", value: bookingList.length, color: "#1e293b" },
-                { label: "Confirmed", value: bookingList.filter(b => b.status === "Confirmed").length, color: "#16a34a" },
-                { label: "Pending", value: bookingList.filter(b => b.status === "Pending").length, color: "#d97706" },
-                { label: "Cancelled", value: bookingList.filter(b => b.status === "Cancelled").length, color: "#dc2626" },
-              ].map((stat, i) => (
-                <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: i < 3 ? "1px solid #f1f5f9" : "none" }}>
+              <div style={{ fontSize: "0.72rem", fontWeight: 700, color: "#94a3b8", letterSpacing: 0.8, textTransform: "uppercase", marginBottom: 12 }}>
+                Booking Stats
+              </div>
+              {stats.map((stat, index) => (
+                <div key={stat.label} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: index < stats.length - 1 ? "1px solid #f1f5f9" : "none" }}>
                   <span style={{ fontSize: "0.85rem", color: "#64748b" }}>{stat.label}</span>
                   <span style={{ fontWeight: 700, color: stat.color }}>{stat.value}</span>
                 </div>
               ))}
             </div>
 
-            {/* Quick Actions */}
             <div className="hs-card" style={{ padding: "18px 20px", marginTop: 16 }}>
-              <div style={{ fontSize: "0.72rem", fontWeight: 700, color: "#94a3b8", letterSpacing: 0.8, textTransform: "uppercase", marginBottom: 12 }}>Quick Actions</div>
+              <div style={{ fontSize: "0.72rem", fontWeight: 700, color: "#94a3b8", letterSpacing: 0.8, textTransform: "uppercase", marginBottom: 12 }}>
+                Quick Actions
+              </div>
               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                 <Link href="/listings" style={{ textDecoration: "none" }}>
                   <button style={{ width: "100%", background: "#eff6ff", border: "none", borderRadius: 8, padding: "9px 14px", color: "#2563EB", fontWeight: 600, fontSize: "0.85rem", cursor: "pointer", display: "flex", alignItems: "center", gap: 8 }}>
-                    <Home size={14} /> Browse Properties
+                    <Home size={14} /> Browse properties
                   </button>
                 </Link>
-                <button
-                  onClick={handleLogout}
-                  style={{ width: "100%", background: "#fef2f2", border: "none", borderRadius: 8, padding: "9px 14px", color: "#dc2626", fontWeight: 600, fontSize: "0.85rem", cursor: "pointer", display: "flex", alignItems: "center", gap: 8 }}
-                >
-                  <LogOut size={14} /> Sign Out
+                <button onClick={handleLogout} style={{ width: "100%", background: "#fef2f2", border: "none", borderRadius: 8, padding: "9px 14px", color: "#dc2626", fontWeight: 600, fontSize: "0.85rem", cursor: "pointer", display: "flex", alignItems: "center", gap: 8 }}>
+                  <LogOut size={14} /> Sign out
                 </button>
               </div>
             </div>
           </div>
 
-          {/* Main Content */}
           <div className="col-lg-9 col-md-8">
-            {/* Tabs */}
             <div style={{ display: "flex", gap: 4, marginBottom: 22, borderBottom: "1px solid #e2e8f0" }}>
-              {[
-                { id: "bookings" as const, label: "Booking History" },
-                { id: "profile" as const, label: "Profile Settings" },
-              ].map(tab => (
-                <button
-                  key={tab.id}
-                  onClick={() => setActiveTab(tab.id)}
-                  style={{
-                    background: "none", border: "none", cursor: "pointer",
-                    padding: "10px 18px", fontWeight: 700,
-                    color: activeTab === tab.id ? "#2563EB" : "#64748b",
-                    borderBottom: activeTab === tab.id ? "2px solid #2563EB" : "2px solid transparent",
-                    fontSize: "0.92rem", transition: "all 0.15s", marginBottom: -1
-                  }}
-                >
+              {[{ id: "bookings" as const, label: "Booking history" }, { id: "profile" as const, label: "Profile details" }].map((tab) => (
+                <button key={tab.id} onClick={() => setActiveTab(tab.id)} style={{ background: "none", border: "none", cursor: "pointer", padding: "10px 18px", fontWeight: 700, color: activeTab === tab.id ? "#2563EB" : "#64748b", borderBottom: activeTab === tab.id ? "2px solid #2563EB" : "2px solid transparent", fontSize: "0.92rem", marginBottom: -1 }}>
                   {tab.label}
                 </button>
               ))}
             </div>
 
-            {/* Bookings Tab */}
-            {activeTab === "bookings" && (
-              <div>
-                {/* Filter Bar */}
+            {activeTab === "bookings" ? (
+              <>
                 <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16, flexWrap: "wrap" }}>
-                  <Filter size={15} color="#64748b" />
-                  <span style={{ fontSize: "0.85rem", color: "#64748b", fontWeight: 600 }}>Filter:</span>
-                  {["All", "Confirmed", "Pending", "Cancelled"].map(status => (
-                    <button
-                      key={status}
-                      onClick={() => setStatusFilter(status)}
-                      style={{
-                        padding: "5px 14px", borderRadius: 20, fontSize: "0.8rem",
-                        border: `1.5px solid ${statusFilter === status ? "#2563EB" : "#e2e8f0"}`,
-                        background: statusFilter === status ? "#eff6ff" : "#fff",
-                        color: statusFilter === status ? "#2563EB" : "#64748b",
-                        fontWeight: statusFilter === status ? 700 : 500, cursor: "pointer"
-                      }}
-                    >
-                      {status}
-                      {status !== "All" && (
-                        <span style={{ marginLeft: 5, fontSize: "0.72rem", opacity: 0.7 }}>
-                          ({bookingList.filter(b => b.status === status).length})
-                        </span>
-                      )}
-                    </button>
-                  ))}
+                  <div style={{ position: "relative", flex: 1, minWidth: 220 }}>
+                    <Search size={15} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "#94a3b8" }} />
+                    <input className="hs-form-control" placeholder="Search property, host, or booking code..." style={{ paddingLeft: 36 }} value={searchValue} onChange={(event) => setSearchValue(event.target.value)} />
+                  </div>
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+                    <Filter size={14} color="#64748b" />
+                    {["all", "pending", "confirmed", "cancelled"].map((value) => (
+                      <button key={value} onClick={() => setStatusFilter(value)} style={{ padding: "5px 14px", borderRadius: 20, fontSize: "0.8rem", border: `1.5px solid ${statusFilter === value ? "#2563EB" : "#e2e8f0"}`, background: statusFilter === value ? "#eff6ff" : "#fff", color: statusFilter === value ? "#2563EB" : "#64748b", fontWeight: statusFilter === value ? 700 : 500, cursor: "pointer" }}>
+                        {value === "all" ? "All" : value.charAt(0).toUpperCase() + value.slice(1)}
+                      </button>
+                    ))}
+                  </div>
                 </div>
 
-                {/* Booking Table */}
                 <div className="hs-card" style={{ overflow: "hidden" }}>
                   <div style={{ overflowX: "auto" }}>
                     <table className="hs-table">
                       <thead>
                         <tr>
-                          <th>Property</th>
-                          <th>Dates</th>
-                          <th>Guests</th>
-                          <th>Total</th>
-                          <th>Status</th>
+                          <th>Booking</th>
+                          <th>Stay</th>
+                          <th>Amount</th>
+                          <th>Booking Status</th>
+                          <th>Payment</th>
                           <th>Actions</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {filtered.length === 0 ? (
-                          <tr>
-                            <td colSpan={6} style={{ textAlign: "center", padding: "48px", color: "#94a3b8" }}>
-                              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
-                                <CalendarDays size={32} color="#e2e8f0" />
-                                <span>No bookings found</span>
-                                <Link href="/listings">
-                                  <button className="btn-primary-hs" style={{ fontSize: "0.82rem", marginTop: 8 }}>
-                                    Find a Stay
-                                  </button>
-                                </Link>
-                              </div>
-                            </td>
-                          </tr>
-                        ) : filtered.map(booking => (
+                        {isLoading ? (
+                          <tr><td colSpan={6} style={{ textAlign: "center", padding: "48px", color: "#94a3b8" }}>Loading your bookings...</td></tr>
+                        ) : filteredBookings.length === 0 ? (
+                          <tr><td colSpan={6} style={{ textAlign: "center", padding: "48px", color: "#94a3b8" }}>No bookings found</td></tr>
+                        ) : filteredBookings.map((booking) => (
                           <tr key={booking.id}>
                             <td>
                               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                                <img
-                                  src={booking.propertyImage} alt=""
-                                  style={{ width: 46, height: 46, borderRadius: 10, objectFit: "cover", flexShrink: 0 }}
-                                />
+                                <img src={booking.propertyImage} alt={booking.propertyTitle} style={{ width: 48, height: 48, borderRadius: 12, objectFit: "cover", flexShrink: 0 }} />
                                 <div>
-                                  <div style={{ fontWeight: 700, color: "#1e293b", fontSize: "0.87rem", maxWidth: 180, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                                    {booking.propertyTitle}
-                                  </div>
-                                  <div style={{ color: "#94a3b8", fontSize: "0.76rem", display: "flex", alignItems: "center", gap: 3 }}>
-                                    <MapPin size={10} /> {booking.propertyLocation}
-                                  </div>
+                                  <div style={{ fontWeight: 700, color: "#1e293b", fontSize: "0.88rem" }}>{booking.propertyTitle}</div>
+                                  <div style={{ color: "#94a3b8", fontSize: "0.76rem", marginTop: 2 }}>{booking.bookingCode}</div>
                                 </div>
                               </div>
                             </td>
                             <td>
-                              <div style={{ fontSize: "0.85rem" }}>
-                                <div style={{ display: "flex", alignItems: "center", gap: 4, color: "#1e293b" }}>
-                                  <CalendarDays size={12} color="#94a3b8" /> {booking.checkIn}
-                                </div>
-                                <div style={{ display: "flex", alignItems: "center", gap: 4, marginTop: 3, color: "#1e293b" }}>
-                                  <Clock size={12} color="#94a3b8" /> {booking.checkOut}
-                                </div>
-                                <div style={{ color: "#64748b", fontSize: "0.76rem", marginTop: 2 }}>{booking.nights} nights</div>
+                              <div style={{ fontSize: "0.85rem", color: "#475569", lineHeight: 1.6 }}>
+                                <div>{booking.checkIn} → {booking.checkOut}</div>
+                                <div style={{ color: "#94a3b8" }}>{booking.nights} nights • {booking.guests} guests</div>
                               </div>
                             </td>
-                            <td style={{ fontSize: "0.87rem", color: "#475569" }}>
-                              <User size={12} style={{ marginRight: 4, color: "#94a3b8" }} />{booking.guests}
-                            </td>
                             <td>
-                              <div style={{ fontWeight: 800, color: "#1e293b", fontSize: "0.95rem" }}>${booking.totalPrice}</div>
-                              <div style={{ color: "#94a3b8", fontSize: "0.73rem" }}>${Math.round(booking.totalPrice / booking.nights)}/night</div>
+                              <div style={{ fontWeight: 800, color: "#1e293b", fontSize: "0.95rem" }}>${booking.totalPrice.toFixed(2)}</div>
+                              <div style={{ color: "#94a3b8", fontSize: "0.73rem" }}>Host: {booking.hostName}</div>
                             </td>
                             <td><StatusBadge status={booking.status} /></td>
+                            <td><PaymentStatusBadge status={booking.paymentStatus} /></td>
                             <td>
                               <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                                 <Link href={`/listings/${booking.propertyId}`}>
@@ -305,46 +334,56 @@ export default function UserDashboard() {
                                     <ExternalLink size={12} /> View
                                   </button>
                                 </Link>
-                                {/* Review Button Logic */}
-                                {booking.status === "Confirmed" && isCheckoutPast(booking.checkOut) && (
-                                  hasReview(booking.id) ? (
-                                    <button
-                                      disabled
-                                      style={{ background: "#f1f5f9", border: "none", borderRadius: 6, padding: "5px 10px", display: "flex", alignItems: "center", gap: 4, fontSize: "0.78rem", color: "#94a3b8", fontWeight: 600, cursor: "default" }}
-                                    >
-                                      <CheckCircle size={12} /> Reviewed ✔
-                                    </button>
-                                  ) : (
-                                    <Link href={`/reviews/create/${booking.id}`}>
-                                      <button style={{ background: "#f0fdf4", border: "1.5px solid #bbf7d0", borderRadius: 6, padding: "5px 10px", cursor: "pointer", display: "flex", alignItems: "center", gap: 4, fontSize: "0.78rem", color: "#16a34a", fontWeight: 700 }}>
-                                        <Star size={12} fill="#16a34a" color="#16a34a" /> Write Review
-                                      </button>
-                                    </Link>
-                                  )
-                                )}
-                                {booking.status !== "Cancelled" && cancelConfirm !== booking.id && (
-                                  <button
-                                    onClick={() => setCancelConfirm(booking.id)}
-                                    style={{ background: "#fee2e2", border: "none", borderRadius: 6, padding: "5px 8px", cursor: "pointer", fontSize: "0.78rem", color: "#dc2626", fontWeight: 600 }}
-                                  >
-                                    Cancel
+                                {booking.status === "pending" && (
+                                  <button onClick={() => { setSelectedBooking(booking); setPageError(""); setPageMessage(""); }} style={{ background: "#f8fafc", border: "1.5px solid #cbd5e1", borderRadius: 6, padding: "5px 8px", cursor: "pointer", display: "flex", alignItems: "center", gap: 4, fontSize: "0.78rem", color: "#475569", fontWeight: 600 }}>
+                                    <CreditCard size={12} /> Payment
                                   </button>
                                 )}
-                                {cancelConfirm === booking.id && (
-                                  <div style={{ display: "flex", gap: 4 }}>
-                                    <button
-                                      onClick={() => handleCancel(booking.id)}
-                                      style={{ background: "#dc2626", border: "none", borderRadius: 6, padding: "5px 8px", cursor: "pointer", fontSize: "0.78rem", color: "#fff", fontWeight: 600 }}
-                                    >
-                                      Confirm
+                                {booking.status === "pending" && (
+                                  <button onClick={() => handleCancelBooking(booking)} disabled={isCancellingBooking === booking.id} style={{ background: "#fee2e2", border: "none", borderRadius: 6, padding: "5px 8px", cursor: isCancellingBooking === booking.id ? "progress" : "pointer", fontSize: "0.78rem", color: "#dc2626", fontWeight: 600, opacity: isCancellingBooking === booking.id ? 0.7 : 1 }}>
+                                    {isCancellingBooking === booking.id ? "Cancelling..." : "Cancel"}
+                                  </button>
+                                )}
+                                {booking.status === "confirmed" &&
+                                  isCheckoutPast(booking.checkOut) &&
+                                  !booking.reviewId && (
+                                  <Link href={`/reviews/create/${booking.id}`}>
+                                    <button style={{ background: "#f0fdf4", border: "1.5px solid #bbf7d0", borderRadius: 6, padding: "5px 10px", cursor: "pointer", display: "flex", alignItems: "center", gap: 4, fontSize: "0.78rem", color: "#16a34a", fontWeight: 700 }}>
+                                      <Star size={12} fill="#16a34a" color="#16a34a" /> Write Review
                                     </button>
-                                    <button
-                                      onClick={() => setCancelConfirm(null)}
-                                      style={{ background: "#f1f5f9", border: "none", borderRadius: 6, padding: "5px 8px", cursor: "pointer", fontSize: "0.78rem", color: "#64748b" }}
-                                    >
-                                      No
-                                    </button>
-                                  </div>
+                                  </Link>
+                                )}
+                                {booking.status === "confirmed" &&
+                                  isCheckoutPast(booking.checkOut) &&
+                                  booking.reviewId && (
+                                  <button
+                                    type="button"
+                                    disabled
+                                    style={{ background: "#eff6ff", border: "1.5px solid #bfdbfe", borderRadius: 6, padding: "5px 10px", cursor: "default", display: "flex", alignItems: "center", gap: 4, fontSize: "0.78rem", color: "#2563EB", fontWeight: 700 }}
+                                  >
+                                    <Star size={12} fill="#2563EB" color="#2563EB" /> Reviewed
+                                  </button>
+                                )}
+                                {booking.status === "confirmed" && (
+                                  <button
+                                    type="button"
+                                    onClick={() => setChatBooking(booking)}
+                                    style={{
+                                      background: "#fff7ed",
+                                      border: "1.5px solid #fed7aa",
+                                      borderRadius: 6,
+                                      padding: "5px 10px",
+                                      cursor: "pointer",
+                                      display: "flex",
+                                      alignItems: "center",
+                                      gap: 4,
+                                      fontSize: "0.78rem",
+                                      color: "#c2410c",
+                                      fontWeight: 700,
+                                    }}
+                                  >
+                                    <MessageCircle size={12} /> Chat
+                                  </button>
                                 )}
                               </div>
                             </td>
@@ -354,84 +393,35 @@ export default function UserDashboard() {
                     </table>
                   </div>
                 </div>
-              </div>
-            )}
-
-            {/* Profile Tab */}
-            {activeTab === "profile" && (
-              <div className="hs-card" style={{ padding: "32px" }}>
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 28 }}>
-                  <div>
-                    <h3 style={{ fontWeight: 700, color: "#1e293b", marginBottom: 4, fontSize: "1.1rem" }}>Profile Information</h3>
-                    <p style={{ color: "#64748b", margin: 0, fontSize: "0.85rem" }}>Update your personal details and preferences.</p>
-                  </div>
-                  {profileSaved && (
-                    <div style={{ background: "#dcfce7", border: "1px solid #bbf7d0", borderRadius: 8, padding: "6px 14px", color: "#16a34a", fontSize: "0.82rem", fontWeight: 600, display: "flex", alignItems: "center", gap: 6 }}>
-                      ✓ Changes saved!
-                    </div>
-                  )}
-                </div>
-
-                {/* Avatar */}
-                <div style={{ display: "flex", alignItems: "center", gap: 20, marginBottom: 28, padding: "20px", background: "#f8fafc", borderRadius: 12, border: "1px solid #e2e8f0" }}>
-                  <div style={{
-                    width: 72, height: 72, borderRadius: "50%",
-                    background: "linear-gradient(135deg, #2563EB, #7c3aed)",
-                    display: "flex", alignItems: "center", justifyContent: "center",
-                    fontSize: "1.6rem", fontWeight: 800, color: "#fff", flexShrink: 0
-                  }}>
-                    {getUserInitials(profileForm.name || displayName)}
-                  </div>
-                  <div>
-                    <div style={{ fontWeight: 700, color: "#1e293b", marginBottom: 4 }}>{profileForm.name || displayName}</div>
-                    <div style={{ color: "#64748b", fontSize: "0.85rem", marginBottom: 10 }}>Guest Account</div>
-                    <button className="btn-outline-hs" style={{ fontSize: "0.78rem", padding: "5px 14px" }}>
-                      Change Photo
-                    </button>
-                  </div>
-                </div>
-
-                <form onSubmit={handleSaveProfile}>
-                  <div className="row g-3">
-                    {[
-                      { label: "Full Name", key: "name", placeholder: "Your full name" },
-                      { label: "Email Address", key: "email", placeholder: "Your email", type: "email" },
-                      { label: "Phone Number", key: "phone", placeholder: "Your phone number" },
-                      { label: "Location", key: "location", placeholder: "Your city, country" },
-                    ].map((field) => (
-                      <div key={field.key} className="col-md-6">
-                        <label className="hs-form-label">{field.label}</label>
-                        <input
-                          type={field.type || "text"}
-                          className="hs-form-control"
-                          value={profileForm[field.key as keyof typeof profileForm]}
-                          placeholder={field.placeholder}
-                          onChange={e => setProfileForm({ ...profileForm, [field.key]: e.target.value })}
-                        />
-                      </div>
-                    ))}
-                    <div className="col-12">
-                      <label className="hs-form-label">Bio</label>
-                      <textarea
-                        className="hs-form-control"
-                        rows={4}
-                        value={profileForm.bio}
-                        placeholder="Tell us about yourself..."
-                        onChange={e => setProfileForm({ ...profileForm, bio: e.target.value })}
-                        style={{ resize: "vertical" }}
-                      />
-                    </div>
-                    <div className="col-12" style={{ paddingTop: 8, display: "flex", gap: 12 }}>
-                      <button type="submit" className="btn-primary-hs">Save Changes</button>
-                      <button type="button" className="btn-outline-hs" onClick={() => setActiveTab("bookings")}>Cancel</button>
-                    </div>
-                  </div>
-                </form>
-              </div>
+              </>
+            ) : (
+              <AccountSettingsPanel
+                user={user}
+                profileTitle="Profile Details"
+                passwordTitle="Change Password"
+              />
             )}
           </div>
         </div>
       </div>
+
+      {selectedBooking && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(15, 23, 42, 0.52)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+          <div style={{ width: "100%", maxWidth: 940, maxHeight: "90vh", overflowY: "auto", borderRadius: 20, background: "#fff", padding: 18, boxShadow: "0 30px 80px rgba(15, 23, 42, 0.22)" }}>
+            <PaymentInstructionsCard booking={selectedBooking} onUpload={handleUploadProof} isUploading={isUploadingProof} uploadError={pageError} uploadSuccess={pageMessage} uploadLabel="Upload or replace proof" />
+            <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 14 }}>
+              <button className="btn-outline-hs" onClick={() => setSelectedBooking(null)}>Close</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <BookingChatDialog
+        booking={chatBooking}
+        scope="guest"
+        title="Booking Chat"
+        onClose={() => setChatBooking(null)}
+      />
     </div>
   );
 }

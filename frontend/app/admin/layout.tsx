@@ -10,7 +10,7 @@ import { usePathname, useRouter } from "next/navigation";
 import {
   LayoutDashboard, Users, Building2, CheckCircle,
   CalendarDays, BarChart2, LogOut, Home, Menu, Bell,
-  Shield, ChevronRight, ExternalLink,
+  Shield, ChevronRight, ExternalLink, User,
 } from "lucide-react";
 import { useAuth } from "@/components/context/AuthContext";
 
@@ -21,6 +21,7 @@ const navItems = [
   { icon: CheckCircle,     label: "Property Approvals",  path: "/admin/property-approvals" },
   { icon: CalendarDays,    label: "Manage Bookings",     path: "/admin/manage-booking" },
   { icon: BarChart2,       label: "Reports",             path: "/admin/manage-reports" },
+  { icon: User,            label: "Profile",             path: "/admin/profile" },
 ];
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {

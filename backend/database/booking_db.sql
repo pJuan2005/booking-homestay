@@ -35,11 +35,38 @@ CREATE TABLE `amenities` (
 -- --------------------------------------------------------
 
 --
+-- Table structure for table `booking_conversations`
+--
+
+CREATE TABLE `booking_conversations` (
+  `id` int(11) NOT NULL,
+  `booking_id` int(11) NOT NULL,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `booking_messages`
+--
+
+CREATE TABLE `booking_messages` (
+  `id` int(11) NOT NULL,
+  `conversation_id` int(11) NOT NULL,
+  `sender_id` int(11) NOT NULL,
+  `message` text NOT NULL,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- --------------------------------------------------------
+
+--
 -- Table structure for table `bookings`
 --
 
 CREATE TABLE `bookings` (
   `id` int(11) NOT NULL,
+  `booking_code` varchar(40) DEFAULT NULL,
   `property_id` int(11) NOT NULL,
   `guest_id` int(11) NOT NULL,
   `check_in` date NOT NULL,
@@ -48,6 +75,16 @@ CREATE TABLE `bookings` (
   `guests` int(11) NOT NULL,
   `total_price` decimal(10,2) DEFAULT NULL,
   `status` enum('pending','confirmed','cancelled') DEFAULT 'pending',
+  `payment_method` varchar(50) NOT NULL DEFAULT 'bank_transfer',
+  `payment_reference` varchar(80) DEFAULT NULL,
+  `payment_status` enum('unpaid','proof_uploaded','verified','rejected') NOT NULL DEFAULT 'unpaid',
+  `payment_proof_image` varchar(255) DEFAULT NULL,
+  `payment_submitted_at` datetime DEFAULT NULL,
+  `confirmed_by` int(11) DEFAULT NULL,
+  `confirmed_at` datetime DEFAULT NULL,
+  `rejection_reason` text DEFAULT NULL,
+  `host_note` text DEFAULT NULL,
+  `checkin_instructions` text DEFAULT NULL,
   `created_at` timestamp NOT NULL DEFAULT current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
@@ -107,6 +144,7 @@ CREATE TABLE `property_images` (
 
 CREATE TABLE `reviews` (
   `id` int(11) NOT NULL,
+  `booking_id` int(11) DEFAULT NULL,
   `property_id` int(11) NOT NULL,
   `guest_id` int(11) NOT NULL,
   `rating` int(11) NOT NULL,
@@ -146,12 +184,29 @@ ALTER TABLE `amenities`
   ADD PRIMARY KEY (`id`);
 
 --
+-- Indexes for table `booking_conversations`
+--
+ALTER TABLE `booking_conversations`
+  ADD PRIMARY KEY (`id`),
+  ADD UNIQUE KEY `idx_booking_conversations_booking_id` (`booking_id`);
+
+--
+-- Indexes for table `booking_messages`
+--
+ALTER TABLE `booking_messages`
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `idx_booking_messages_conversation_id` (`conversation_id`),
+  ADD KEY `idx_booking_messages_sender_id` (`sender_id`);
+
+--
 -- Indexes for table `bookings`
 --
 ALTER TABLE `bookings`
   ADD PRIMARY KEY (`id`),
+  ADD UNIQUE KEY `idx_bookings_booking_code` (`booking_code`),
   ADD KEY `property_id` (`property_id`),
-  ADD KEY `guest_id` (`guest_id`);
+  ADD KEY `guest_id` (`guest_id`),
+  ADD KEY `idx_bookings_confirmed_by` (`confirmed_by`);
 
 --
 -- Indexes for table `properties`
@@ -179,8 +234,9 @@ ALTER TABLE `property_images`
 --
 ALTER TABLE `reviews`
   ADD PRIMARY KEY (`id`),
-  ADD UNIQUE KEY `property_id` (`property_id`,`guest_id`),
-  ADD KEY `guest_id` (`guest_id`);
+  ADD UNIQUE KEY `idx_reviews_booking_id` (`booking_id`),
+  ADD KEY `guest_id` (`guest_id`),
+  ADD KEY `idx_reviews_property_guest` (`property_id`,`guest_id`);
 
 --
 -- Indexes for table `users`
@@ -197,6 +253,18 @@ ALTER TABLE `users`
 -- AUTO_INCREMENT for table `amenities`
 --
 ALTER TABLE `amenities`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
+
+--
+-- AUTO_INCREMENT for table `booking_conversations`
+--
+ALTER TABLE `booking_conversations`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
+
+--
+-- AUTO_INCREMENT for table `booking_messages`
+--
+ALTER TABLE `booking_messages`
   MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
 
 --
@@ -236,9 +304,23 @@ ALTER TABLE `users`
 --
 -- Constraints for table `bookings`
 --
+ALTER TABLE `booking_conversations`
+  ADD CONSTRAINT `booking_conversations_ibfk_1` FOREIGN KEY (`booking_id`) REFERENCES `bookings` (`id`);
+
+--
+-- Constraints for table `booking_messages`
+--
+ALTER TABLE `booking_messages`
+  ADD CONSTRAINT `booking_messages_ibfk_1` FOREIGN KEY (`conversation_id`) REFERENCES `booking_conversations` (`id`),
+  ADD CONSTRAINT `booking_messages_ibfk_2` FOREIGN KEY (`sender_id`) REFERENCES `users` (`id`);
+
+--
+-- Constraints for table `bookings`
+--
 ALTER TABLE `bookings`
   ADD CONSTRAINT `bookings_ibfk_1` FOREIGN KEY (`property_id`) REFERENCES `properties` (`id`),
-  ADD CONSTRAINT `bookings_ibfk_2` FOREIGN KEY (`guest_id`) REFERENCES `users` (`id`);
+  ADD CONSTRAINT `bookings_ibfk_2` FOREIGN KEY (`guest_id`) REFERENCES `users` (`id`),
+  ADD CONSTRAINT `bookings_ibfk_3` FOREIGN KEY (`confirmed_by`) REFERENCES `users` (`id`);
 
 --
 -- Constraints for table `properties`
@@ -264,7 +346,8 @@ ALTER TABLE `property_images`
 --
 ALTER TABLE `reviews`
   ADD CONSTRAINT `reviews_ibfk_1` FOREIGN KEY (`property_id`) REFERENCES `properties` (`id`),
-  ADD CONSTRAINT `reviews_ibfk_2` FOREIGN KEY (`guest_id`) REFERENCES `users` (`id`);
+  ADD CONSTRAINT `reviews_ibfk_2` FOREIGN KEY (`guest_id`) REFERENCES `users` (`id`),
+  ADD CONSTRAINT `reviews_ibfk_3` FOREIGN KEY (`booking_id`) REFERENCES `bookings` (`id`);
 COMMIT;
 
 /*!40101 SET CHARACTER_SET_CLIENT=@OLD_CHARACTER_SET_CLIENT */;
@@ -334,31 +417,27 @@ INSERT INTO property_amenities (property_id,amenity_id) VALUES
 (10,1),(10,3);
 
 INSERT INTO bookings
-(property_id,guest_id,check_in,check_out,nights,guests,total_price,status)
+(booking_code,property_id,guest_id,check_in,check_out,nights,guests,total_price,status,payment_method,payment_reference,payment_status,payment_proof_image,payment_submitted_at,confirmed_by,confirmed_at,rejection_reason,host_note,checkin_instructions)
 VALUES
-(1,5,'2026-03-10','2026-03-12',2,2,400,'confirmed'),
-(2,6,'2026-03-15','2026-03-18',3,2,360,'confirmed'),
-(3,7,'2026-03-20','2026-03-22',2,1,140,'pending'),
-(4,8,'2026-03-05','2026-03-07',2,3,300,'confirmed'),
-(5,9,'2026-03-12','2026-03-14',2,2,360,'pending'),
-(6,10,'2026-03-18','2026-03-20',2,4,320,'confirmed'),
-(7,5,'2026-03-25','2026-03-28',3,4,660,'confirmed'),
-(8,6,'2026-03-01','2026-03-02',1,1,60,'confirmed'),
-(9,7,'2026-03-10','2026-03-13',3,2,330,'cancelled'),
-(10,8,'2026-03-15','2026-03-17',2,3,600,'confirmed');
+(CONCAT('BK', DATE_FORMAT(NOW(), '%Y%m%d'), '0001'),1,5,'2026-03-10','2026-03-12',2,2,448,'confirmed','bank_transfer','HSBK000001','verified',NULL,'2026-03-09 12:30:00',2,'2026-03-09 14:00:00',NULL,'Welcome drink included.','Self check-in after 2 PM. Door code: 2580#'),
+(CONCAT('BK', DATE_FORMAT(NOW(), '%Y%m%d'), '0002'),2,6,'2026-03-15','2026-03-18',3,2,403.20,'confirmed','bank_transfer','HSBK000002','verified',NULL,'2026-03-13 10:00:00',1,'2026-03-13 12:00:00',NULL,'Please bring an ID card at check-in.','Reception desk is on floor 1.'),
+(CONCAT('BK', DATE_FORMAT(NOW(), '%Y%m%d'), '0003'),3,7,'2026-03-20','2026-03-22',2,1,156.80,'pending','bank_transfer','HSBK000003','unpaid',NULL,NULL,NULL,NULL,NULL,NULL,NULL),
+(CONCAT('BK', DATE_FORMAT(NOW(), '%Y%m%d'), '0004'),4,8,'2026-03-05','2026-03-07',2,3,336,'confirmed','bank_transfer','HSBK000004','verified',NULL,'2026-03-03 09:15:00',3,'2026-03-03 18:45:00',NULL,'Breakfast prepared for 3 guests.','Meet the host at the garden gate.'),
+(CONCAT('BK', DATE_FORMAT(NOW(), '%Y%m%d'), '0005'),5,9,'2026-03-12','2026-03-14',2,2,403.20,'pending','bank_transfer','HSBK000005','proof_uploaded',NULL,'2026-03-11 21:30:00',NULL,NULL,NULL,NULL,NULL),
+(CONCAT('BK', DATE_FORMAT(NOW(), '%Y%m%d'), '0006'),6,10,'2026-03-18','2026-03-20',2,4,358.40,'confirmed','bank_transfer','HSBK000006','verified',NULL,'2026-03-16 08:00:00',4,'2026-03-16 11:20:00',NULL,'Parking is included in the rate.','Parking slot B12 is reserved for you.'),
+(CONCAT('BK', DATE_FORMAT(NOW(), '%Y%m%d'), '0007'),7,5,'2026-03-25','2026-03-28',3,4,739.20,'confirmed','bank_transfer','HSBK000007','verified',NULL,'2026-03-22 14:00:00',2,'2026-03-22 18:10:00',NULL,'Pool closes at 9 PM.','Caretaker will hand over the key at arrival.'),
+(CONCAT('BK', DATE_FORMAT(NOW(), '%Y%m%d'), '0008'),8,6,'2026-03-01','2026-03-02',1,1,67.20,'confirmed','bank_transfer','HSBK000008','verified',NULL,'2026-02-27 10:00:00',3,'2026-02-27 11:45:00',NULL,NULL,'Gate password: HUE2026'),
+(CONCAT('BK', DATE_FORMAT(NOW(), '%Y%m%d'), '0009'),9,7,'2026-03-10','2026-03-13',3,2,369.60,'cancelled','bank_transfer','HSBK000009','rejected',NULL,'2026-03-08 15:20:00',1,'2026-03-08 19:00:00','The payment proof did not match the transfer amount.',NULL,NULL),
+(CONCAT('BK', DATE_FORMAT(NOW(), '%Y%m%d'), '0010'),10,8,'2026-03-15','2026-03-17',2,3,672,'confirmed','bank_transfer','HSBK000010','verified',NULL,'2026-03-12 13:00:00',1,'2026-03-12 15:30:00',NULL,'Mountain weather can be cold at night.','The cabin key is in the smart lock box beside the front door.');
 
-INSERT INTO reviews (property_id,guest_id,rating,comment)
+INSERT INTO reviews (booking_id,property_id,guest_id,rating,comment)
 VALUES
-(1,5,5,'Amazing villa'),
-(2,6,4,'Very comfortable'),
-(3,7,4,'Nice place'),
-(4,8,5,'Beautiful view'),
-(5,9,4,'Good stay'),
-(6,10,5,'Peaceful location'),
-(7,5,5,'Luxury experience'),
-(8,6,3,'Budget friendly'),
-(9,7,4,'Near beach'),
-(10,8,5,'Best penthouse');
+(1,1,5,5,'Amazing villa'),
+(2,2,6,4,'Very comfortable'),
+(4,4,8,5,'Beautiful view'),
+(6,6,10,5,'Peaceful location'),
+(8,8,6,3,'Budget friendly'),
+(10,10,8,5,'Best penthouse');
 
 -- update sql
 ALTER TABLE properties 

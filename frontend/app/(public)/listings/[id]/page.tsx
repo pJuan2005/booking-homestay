@@ -8,7 +8,13 @@ import {
   ChevronRight, Heart, CheckCircle, MessageSquare, TrendingUp
 } from "lucide-react";
 import { getPropertyById } from "@/services/propertyService";
+import {
+  createBooking,
+  uploadPaymentProof,
+  type BookingRecord,
+} from "@/services/bookingService";
 import { useAuth } from "@/components/context/AuthContext";
+import { PaymentInstructionsCard } from "@/components/shared/PaymentInstructionsCard";
 
 const amenityIcons: Record<string, React.ReactNode> = {
   "Wifi": <Wifi size={16} />,
@@ -56,7 +62,11 @@ export default function DetailPage() {
   const [activeImg, setActiveImg] = useState(0);
   const [bookingForm, setBookingForm] = useState({ checkIn: "", checkOut: "", guests: "1" });
   const [liked, setLiked] = useState(false);
-  const [bookingSuccess, setBookingSuccess] = useState(false);
+  const [bookingError, setBookingError] = useState("");
+  const [bookingMessage, setBookingMessage] = useState("");
+  const [createdBooking, setCreatedBooking] = useState<BookingRecord | null>(null);
+  const [isSubmittingBooking, setIsSubmittingBooking] = useState(false);
+  const [isUploadingProof, setIsUploadingProof] = useState(false);
 
   useEffect(() => {
     if (id) {
@@ -86,7 +96,9 @@ export default function DetailPage() {
     return (
       <div style={{ minHeight: "60vh", display: "flex", alignItems: "center", justifyContent: "center", textAlign: "center" }}>
         <div>
-          <div style={{ fontSize: "1rem", marginBottom: 16, color: "#64748b" }}>`r`n            Listing unavailable`r`n          </div>
+          <div style={{ fontSize: "1rem", marginBottom: 16, color: "#64748b" }}>
+            Listing unavailable
+          </div>
           <h2 style={{ color: "#1e293b", fontWeight: 700 }}>Property not found</h2>
           <Link href="/listings"><button className="btn-primary-hs" style={{ marginTop: 16 }}>Back to Listings</button></Link>
         </div>
@@ -107,9 +119,66 @@ export default function DetailPage() {
   const propertyReviews = property.reviews || [];
   const avgRating = Number(property.rating) || 0;
 
-  const handleBooking = (e: React.FormEvent) => {
+  const handleBooking = async (e: React.FormEvent) => {
     e.preventDefault();
-    setBookingSuccess(true);
+
+    if (!user) {
+      router.push("/auth/login");
+      return;
+    }
+
+    if (user.role !== "Guest") {
+      setBookingError("Only guest accounts can create a booking.");
+      return;
+    }
+
+    setIsSubmittingBooking(true);
+    setBookingError("");
+    setBookingMessage("");
+
+    try {
+      const response = await createBooking({
+        propertyId: Number(property.id),
+        checkIn: bookingForm.checkIn,
+        checkOut: bookingForm.checkOut,
+        guests: Number(bookingForm.guests),
+      });
+
+      setCreatedBooking(response.data);
+      setBookingMessage(response.message);
+    } catch (error) {
+      setBookingError(
+        error instanceof Error
+          ? error.message
+          : "Unable to create the booking request right now.",
+      );
+    } finally {
+      setIsSubmittingBooking(false);
+    }
+  };
+
+  const handleUploadPaymentProof = async (file: File) => {
+    if (!createdBooking) {
+      return;
+    }
+
+    setIsUploadingProof(true);
+    setBookingError("");
+    setBookingMessage("");
+
+    try {
+      const response = await uploadPaymentProof(createdBooking.id, file);
+      setCreatedBooking(response.data);
+      setBookingMessage(response.message);
+    } catch (error) {
+      setBookingError(
+        error instanceof Error
+          ? error.message
+          : "Unable to upload the payment proof right now.",
+      );
+    } finally {
+      setIsUploadingProof(false);
+    }
   };
 
   // Rating breakdown
@@ -372,14 +441,66 @@ export default function DetailPage() {
                   </div>
                 </div>
 
-                {bookingSuccess ? (
-                  <div style={{ textAlign: "center", padding: "24px 0" }}>
-                    <div style={{ fontSize: "2.5rem", marginBottom: 12 }}>đŸ‰</div>
-                    <div style={{ fontWeight: 700, color: "#16a34a", fontSize: "1.1rem", marginBottom: 8 }}>Booking Submitted!</div>
-                    <p style={{ color: "#64748b", fontSize: "0.87rem" }}>Your booking request is pending confirmation from the host.</p>
-                    <button className="btn-primary-hs" style={{ marginTop: 12, width: "100%" }} onClick={() => setBookingSuccess(false)}>
-                      Book Again
-                    </button>
+                {createdBooking ? (
+                  <div style={{ marginTop: 16 }}>
+                    <div
+                      style={{
+                        background: "#eff6ff",
+                        border: "1px solid #bfdbfe",
+                        borderRadius: 14,
+                        padding: "14px 16px",
+                        marginBottom: 16,
+                      }}
+                    >
+                      <div
+                        style={{
+                          fontWeight: 700,
+                          color: "#1d4ed8",
+                          fontSize: "0.96rem",
+                          marginBottom: 4,
+                        }}
+                      >
+                        Booking request created
+                      </div>
+                      <p
+                        style={{
+                          margin: 0,
+                          color: "#475569",
+                          fontSize: "0.84rem",
+                          lineHeight: 1.7,
+                        }}
+                      >
+                        Complete the transfer, upload your payment proof, and wait
+                        for the host or admin to confirm the booking.
+                      </p>
+                    </div>
+
+                    <PaymentInstructionsCard
+                      booking={createdBooking}
+                      onUpload={handleUploadPaymentProof}
+                      isUploading={isUploadingProof}
+                      uploadError={bookingError}
+                      uploadSuccess={bookingMessage}
+                    />
+
+                    <div style={{ display: "flex", gap: 10, marginTop: 16 }}>
+                      <Link href="/dashboard" style={{ flex: 1 }}>
+                        <button className="btn-primary-hs" style={{ width: "100%" }}>
+                          Go to dashboard
+                        </button>
+                      </Link>
+                      <button
+                        className="btn-outline-hs"
+                        style={{ flex: 1 }}
+                        onClick={() => {
+                          setCreatedBooking(null);
+                          setBookingMessage("");
+                          setBookingError("");
+                        }}
+                      >
+                        Create another request
+                      </button>
+                    </div>
                   </div>
                 ) : (
                   <form onSubmit={handleBooking} style={{ marginTop: 16 }}>
@@ -416,19 +537,40 @@ export default function DetailPage() {
                       </div>
                     </div>
 
-                    <button type="submit" className="btn-primary-hs" style={{ width: "100%", marginBottom: 12, fontSize: "0.95rem" }}>
+                    <button
+                      type="submit"
+                      className="btn-primary-hs"
+                      style={{ width: "100%", marginBottom: 12, fontSize: "0.95rem" }}
+                      disabled={isSubmittingBooking}
+                    >
                       <Calendar size={16} style={{ marginRight: 6, verticalAlign: "middle" }} />
-                      Book Now
+                      {isSubmittingBooking ? "Submitting request..." : "Request booking"}
                     </button>
 
                     <p style={{ textAlign: "center", color: "#94a3b8", fontSize: "0.78rem", margin: "0 0 14px" }}>
-                      You won&apos;t be charged yet
+                      We will create a pending booking and show the transfer details next.
                     </p>
+
+                    {bookingError && (
+                      <div
+                        style={{
+                          background: "#fef2f2",
+                          border: "1px solid #fecaca",
+                          borderRadius: 10,
+                          padding: "10px 12px",
+                          color: "#b91c1c",
+                          fontSize: "0.82rem",
+                          marginBottom: 14,
+                        }}
+                      >
+                        {bookingError}
+                      </div>
+                    )}
 
                     {nights > 0 && (
                       <div style={{ borderTop: "1px solid #e2e8f0", paddingTop: 14 }}>
                         <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.88rem", color: "#475569", marginBottom: 8 }}>
-                          <span>${property.price} Ă— {nights} nights</span>
+                          <span>${property.price} × {nights} nights</span>
                           <span>${subtotal}</span>
                         </div>
                         <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.88rem", color: "#475569", marginBottom: 8 }}>

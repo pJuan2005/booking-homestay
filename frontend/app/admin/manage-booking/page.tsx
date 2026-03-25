@@ -1,195 +1,286 @@
 "use client";
-// ============================================================
-// TARGET: frontend/app/admin/manage-booking/page.tsx
-// ============================================================
 
-import { useState } from "react";
-import { Search, CalendarDays, Filter, RefreshCw } from "lucide-react";
-import { bookings as initialBookings } from "@/lib/mockData";
-import type { Booking } from "@/lib/mockData";
+import { useEffect, useMemo, useState } from "react";
+import { Filter, MessageCircle, Search } from "lucide-react";
+import { BookingChatDialog } from "@/components/shared/BookingChatDialog";
 import { StatusBadge } from "@/components/shared/StatusBadge";
+import { PaymentStatusBadge } from "@/components/shared/PaymentStatusBadge";
+import { BookingReviewDialog } from "@/components/shared/BookingReviewDialog";
+import {
+  getAdminBookings,
+  reviewAdminBooking,
+  type BookingRecord,
+} from "@/services/bookingService";
 
 export default function ManageBookingsPage() {
-  const [bookingList, setBookingList] = useState(initialBookings);
+  const [bookings, setBookings] = useState<BookingRecord[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState("All");
-  const [updateModal, setUpdateModal] = useState<Booking | null>(null);
-  const [newStatus, setNewStatus] = useState<"Pending" | "Confirmed" | "Cancelled">("Confirmed");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [selectedBooking, setSelectedBooking] = useState<BookingRecord | null>(null);
+  const [chatBooking, setChatBooking] = useState<BookingRecord | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
 
-  const filtered = bookingList.filter(b => {
-    const matchSearch = !search ||
-      b.guestName.toLowerCase().includes(search.toLowerCase()) ||
-      b.propertyTitle.toLowerCase().includes(search.toLowerCase()) ||
-      b.hostName.toLowerCase().includes(search.toLowerCase());
-    const matchStatus = statusFilter === "All" || b.status === statusFilter;
-    return matchSearch && matchStatus;
-  });
+  async function loadBookings() {
+    setIsLoading(true);
+    setError("");
 
-  const handleUpdateStatus = () => {
-    if (!updateModal) return;
-    setBookingList(prev => prev.map(b => b.id === updateModal.id ? { ...b, status: newStatus } : b));
-    setUpdateModal(null);
-  };
+    try {
+      const data = await getAdminBookings();
+      setBookings(data);
+    } catch (loadError) {
+      setError(
+        loadError instanceof Error
+          ? loadError.message
+          : "Unable to load the booking list right now.",
+      );
+    } finally {
+      setIsLoading(false);
+    }
+  }
 
-  const totalRevenue = bookingList.filter(b => b.status === "Confirmed").reduce((s, b) => s + b.totalPrice, 0);
+  useEffect(() => {
+    loadBookings();
+  }, []);
+
+  const filteredBookings = useMemo(
+    () =>
+      bookings.filter((booking) => {
+        const keyword = search.trim().toLowerCase();
+        const matchesSearch =
+          !keyword ||
+          booking.guestName.toLowerCase().includes(keyword) ||
+          booking.hostName.toLowerCase().includes(keyword) ||
+          booking.propertyTitle.toLowerCase().includes(keyword) ||
+          booking.bookingCode.toLowerCase().includes(keyword);
+        const matchesStatus =
+          statusFilter === "all" || booking.status === statusFilter;
+
+        return matchesSearch && matchesStatus;
+      }),
+    [bookings, search, statusFilter],
+  );
+
+  const summary = [
+    { label: "Total Bookings", value: bookings.length, color: "#2563EB", bg: "#eff6ff" },
+    { label: "Confirmed", value: bookings.filter((booking) => booking.status === "confirmed").length, color: "#16a34a", bg: "#dcfce7" },
+    { label: "Pending", value: bookings.filter((booking) => booking.status === "pending").length, color: "#d97706", bg: "#fef3c7" },
+    { label: "Awaiting Review", value: bookings.filter((booking) => booking.paymentStatus === "proof_uploaded").length, color: "#7c3aed", bg: "#f3e8ff" },
+  ];
+
+  const totalRevenue = bookings
+    .filter((booking) => booking.status === "confirmed")
+    .reduce((sum, booking) => sum + booking.totalPrice, 0);
+
+  async function handleReview(payload: {
+    decision: "approve" | "reject";
+    hostNote: string;
+    checkinInstructions: string;
+    rejectionReason: string;
+  }) {
+    if (!selectedBooking) {
+      return;
+    }
+
+    setIsSubmitting(true);
+    setError("");
+    setMessage("");
+
+    try {
+      const response = await reviewAdminBooking(selectedBooking.id, payload);
+      setBookings((currentBookings) =>
+        currentBookings.map((booking) =>
+          booking.id === response.data.id ? response.data : booking,
+        ),
+      );
+      setMessage(response.message);
+      setSelectedBooking(null);
+    } catch (reviewError) {
+      setError(
+        reviewError instanceof Error
+          ? reviewError.message
+          : "Unable to review this booking right now.",
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
 
   return (
     <div style={{ padding: "28px" }}>
       <div style={{ marginBottom: 24 }}>
-        <h1 style={{ fontWeight: 800, color: "#1e293b", marginBottom: 4, fontSize: "1.5rem" }}>Manage Bookings</h1>
-        <p style={{ color: "#64748b", margin: 0 }}>View and manage all platform bookings</p>
+        <h1 style={{ fontWeight: 800, color: "#1e293b", marginBottom: 4, fontSize: "1.5rem" }}>
+          Manage Bookings
+        </h1>
+        <p style={{ color: "#64748b", margin: 0 }}>
+          Supervise payment proofs and confirm platform bookings from one screen.
+        </p>
       </div>
 
-      {/* Summary */}
+      {(error || message) && (
+        <div style={{ marginBottom: 18, borderRadius: 12, padding: "12px 14px", border: `1px solid ${error ? "#fecaca" : "#bbf7d0"}`, background: error ? "#fef2f2" : "#f0fdf4", color: error ? "#b91c1c" : "#166534", fontSize: "0.84rem" }}>
+          {error || message}
+        </div>
+      )}
+
       <div className="row g-3 mb-4">
-        {[
-          { label: "Total Bookings", value: bookingList.length, color: "#2563EB", bg: "#eff6ff" },
-          { label: "Confirmed", value: bookingList.filter(b => b.status === "Confirmed").length, color: "#16a34a", bg: "#dcfce7" },
-          { label: "Pending", value: bookingList.filter(b => b.status === "Pending").length, color: "#d97706", bg: "#fef3c7" },
-          { label: "Revenue", value: `$${totalRevenue.toLocaleString()}`, color: "#7c3aed", bg: "#f3e8ff" },
-        ].map(s => (
-          <div key={s.label} className="col-6 col-md-3">
-            <div style={{ background: s.bg, borderRadius: 10, padding: "16px 18px", textAlign: "center" }}>
-              <div style={{ fontSize: s.label === "Revenue" ? "1.3rem" : "1.8rem", fontWeight: 800, color: s.color }}>{s.value}</div>
-              <div style={{ fontSize: "0.82rem", color: s.color, fontWeight: 600 }}>{s.label}</div>
+        {summary.map((item) => (
+          <div key={item.label} className="col-6 col-md-3">
+            <div style={{ background: item.bg, borderRadius: 12, padding: "16px 18px", textAlign: "center" }}>
+              <div style={{ fontSize: "1.8rem", fontWeight: 800, color: item.color }}>
+                {item.value}
+              </div>
+              <div style={{ fontSize: "0.82rem", color: item.color, fontWeight: 600 }}>
+                {item.label}
+              </div>
             </div>
           </div>
         ))}
       </div>
 
-      {/* Filters */}
+      <div className="hs-card" style={{ padding: "16px 18px", marginBottom: 18 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 12 }}>
+          <div>
+            <div style={{ color: "#94a3b8", fontSize: "0.74rem", fontWeight: 700, letterSpacing: 0.6, textTransform: "uppercase" }}>
+              Confirmed Revenue
+            </div>
+            <div style={{ color: "#1e293b", fontSize: "1.35rem", fontWeight: 800 }}>
+              ${totalRevenue.toFixed(2)}
+            </div>
+          </div>
+          <div style={{ color: "#64748b", fontSize: "0.84rem" }}>
+            Revenue here is based on confirmed bookings only.
+          </div>
+        </div>
+      </div>
+
       <div style={{ display: "flex", gap: 10, marginBottom: 20, flexWrap: "wrap", alignItems: "center" }}>
         <div style={{ position: "relative", flex: 1, minWidth: 220 }}>
           <Search size={15} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "#94a3b8" }} />
-          <input className="hs-form-control" placeholder="Search guest, property, or host..."
-            style={{ paddingLeft: 36 }} value={search} onChange={e => setSearch(e.target.value)} />
+          <input className="hs-form-control" placeholder="Search guest, host, property, or booking code..." style={{ paddingLeft: 36 }} value={search} onChange={(event) => setSearch(event.target.value)} />
         </div>
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
           <Filter size={14} color="#64748b" />
-          {["All", "Confirmed", "Pending", "Cancelled"].map(s => (
-            <button key={s} onClick={() => setStatusFilter(s)} style={{
-              padding: "6px 12px", borderRadius: 20, fontSize: "0.8rem",
-              border: `1.5px solid ${statusFilter === s ? "#2563EB" : "#e2e8f0"}`,
-              background: statusFilter === s ? "#eff6ff" : "#fff",
-              color: statusFilter === s ? "#2563EB" : "#64748b",
-              fontWeight: statusFilter === s ? 700 : 500, cursor: "pointer"
-            }}>{s}</button>
+          {["all", "pending", "confirmed", "cancelled"].map((status) => (
+            <button key={status} onClick={() => setStatusFilter(status)} style={{ padding: "6px 12px", borderRadius: 20, fontSize: "0.8rem", border: `1.5px solid ${statusFilter === status ? "#2563EB" : "#e2e8f0"}`, background: statusFilter === status ? "#eff6ff" : "#fff", color: statusFilter === status ? "#2563EB" : "#64748b", fontWeight: statusFilter === status ? 700 : 500, cursor: "pointer" }}>
+              {status === "all" ? "All" : status.charAt(0).toUpperCase() + status.slice(1)}
+            </button>
           ))}
         </div>
       </div>
 
-      {/* Table */}
       <div className="hs-card" style={{ overflow: "hidden" }}>
         <div style={{ padding: "12px 20px", borderBottom: "1px solid #e2e8f0", fontSize: "0.85rem", color: "#64748b" }}>
-          Showing {filtered.length} of {bookingList.length} bookings
+          Showing {filteredBookings.length} of {bookings.length} bookings
         </div>
         <div style={{ overflowX: "auto" }}>
           <table className="hs-table">
             <thead>
               <tr>
-                <th>Booking ID</th>
+                <th>Booking</th>
                 <th>Guest</th>
-                <th>Property</th>
                 <th>Host</th>
-                <th>Check-In</th>
-                <th>Check-Out</th>
-                <th>Nights</th>
+                <th>Property</th>
                 <th>Total</th>
-                <th>Status</th>
+                <th>Booking Status</th>
+                <th>Payment</th>
                 <th>Actions</th>
               </tr>
             </thead>
             <tbody>
-              {filtered.length === 0 ? (
+              {isLoading ? (
                 <tr>
-                  <td colSpan={10} style={{ textAlign: "center", padding: "48px", color: "#94a3b8" }}>
+                  <td colSpan={8} style={{ textAlign: "center", padding: "48px", color: "#94a3b8" }}>
+                    Loading bookings...
+                  </td>
+                </tr>
+              ) : filteredBookings.length === 0 ? (
+                <tr>
+                  <td colSpan={8} style={{ textAlign: "center", padding: "48px", color: "#94a3b8" }}>
                     No bookings found
                   </td>
                 </tr>
-              ) : filtered.map(b => (
-                <tr key={b.id}>
-                  <td style={{ fontWeight: 700, color: "#2563EB", fontSize: "0.87rem" }}>
-                    #BK{String(b.id).padStart(4, "0")}
-                  </td>
-                  <td>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                      <div style={{ width: 32, height: 32, borderRadius: "50%", background: "#eff6ff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "0.78rem", fontWeight: 700, color: "#2563EB", flexShrink: 0 }}>
-                        {b.guestName.split(" ").map(w => w[0]).join("")}
+              ) : (
+                filteredBookings.map((booking) => (
+                  <tr key={booking.id}>
+                    <td>
+                      <div style={{ fontWeight: 700, color: "#2563EB", fontSize: "0.87rem" }}>
+                        {booking.bookingCode}
                       </div>
-                      <div>
-                        <div style={{ fontWeight: 600, color: "#1e293b", fontSize: "0.87rem" }}>{b.guestName}</div>
-                        <div style={{ color: "#94a3b8", fontSize: "0.75rem" }}>{b.guestEmail}</div>
+                      <div style={{ color: "#94a3b8", fontSize: "0.75rem" }}>
+                        {booking.checkIn} → {booking.checkOut}
                       </div>
-                    </div>
-                  </td>
-                  <td>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                      <img src={b.propertyImage} alt="" style={{ width: 36, height: 36, borderRadius: 6, objectFit: "cover", flexShrink: 0 }} />
-                      <span style={{ fontSize: "0.85rem", color: "#475569", maxWidth: 130, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{b.propertyTitle}</span>
-                    </div>
-                  </td>
-                  <td style={{ fontSize: "0.85rem", color: "#64748b" }}>{b.hostName}</td>
-                  <td>
-                    <div style={{ display: "flex", alignItems: "center", gap: 4, fontSize: "0.83rem", color: "#475569" }}>
-                      <CalendarDays size={12} color="#2563EB" /> {b.checkIn}
-                    </div>
-                  </td>
-                  <td>
-                    <div style={{ display: "flex", alignItems: "center", gap: 4, fontSize: "0.83rem", color: "#475569" }}>
-                      <CalendarDays size={12} color="#94a3b8" /> {b.checkOut}
-                    </div>
-                  </td>
-                  <td style={{ textAlign: "center", fontWeight: 600, color: "#1e293b" }}>{b.nights}</td>
-                  <td style={{ fontWeight: 800, color: "#1e293b" }}>${b.totalPrice}</td>
-                  <td><StatusBadge status={b.status} /></td>
-                  <td>
-                    <button
-                      onClick={() => { setUpdateModal(b); setNewStatus(b.status); }}
-                      style={{ display: "flex", alignItems: "center", gap: 4, padding: "6px 10px", borderRadius: 7, border: "1.5px solid #e2e8f0", background: "#fff", color: "#64748b", fontSize: "0.8rem", fontWeight: 600, cursor: "pointer" }}
-                    >
-                      <RefreshCw size={13} /> Update
-                    </button>
-                  </td>
-                </tr>
-              ))}
+                    </td>
+                    <td>
+                      <div style={{ fontWeight: 600, color: "#1e293b", fontSize: "0.87rem" }}>{booking.guestName}</div>
+                      <div style={{ color: "#94a3b8", fontSize: "0.75rem" }}>{booking.guestEmail}</div>
+                    </td>
+                    <td style={{ fontSize: "0.85rem", color: "#475569" }}>{booking.hostName}</td>
+                    <td>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <img src={booking.propertyImage} alt={booking.propertyTitle} style={{ width: 40, height: 40, borderRadius: 10, objectFit: "cover", flexShrink: 0 }} />
+                        <span style={{ fontSize: "0.85rem", color: "#475569", maxWidth: 160, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                          {booking.propertyTitle}
+                        </span>
+                      </div>
+                    </td>
+                    <td style={{ fontWeight: 800, color: "#1e293b" }}>${booking.totalPrice.toFixed(2)}</td>
+                    <td><StatusBadge status={booking.status} /></td>
+                    <td><PaymentStatusBadge status={booking.paymentStatus} /></td>
+                    <td>
+                      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                        <button onClick={() => { setSelectedBooking(booking); setError(""); setMessage(""); }} style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "6px 10px", borderRadius: 7, border: "1.5px solid #e2e8f0", background: "#fff", color: "#64748b", fontSize: "0.8rem", fontWeight: 600, cursor: "pointer" }}>
+                          Review
+                        </button>
+                        {booking.status === "confirmed" && (
+                          <button
+                            type="button"
+                            onClick={() => setChatBooking(booking)}
+                            style={{
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: 4,
+                              padding: "6px 10px",
+                              borderRadius: 7,
+                              border: "1.5px solid #fed7aa",
+                              background: "#fff7ed",
+                              color: "#c2410c",
+                              fontSize: "0.8rem",
+                              fontWeight: 700,
+                              cursor: "pointer",
+                            }}
+                          >
+                            <MessageCircle size={13} />
+                            Chat
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>
       </div>
 
-      {/* Update Status Modal */}
-      {updateModal && (
-        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 9999, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
-          <div style={{ background: "#fff", borderRadius: 16, maxWidth: 420, width: "100%", padding: "28px" }}>
-            <h3 style={{ fontWeight: 700, color: "#1e293b", marginBottom: 6 }}>Update Booking Status</h3>
-            <p style={{ color: "#64748b", fontSize: "0.88rem", marginBottom: 20 }}>
-              Booking <strong>#BK{String(updateModal.id).padStart(4, "0")}</strong> — {updateModal.guestName}
-            </p>
-            <div style={{ background: "#f8fafc", borderRadius: 8, padding: "12px 14px", marginBottom: 18 }}>
-              <div style={{ fontSize: "0.83rem", color: "#64748b" }}>
-                {updateModal.propertyTitle}<br />
-                {updateModal.checkIn} → {updateModal.checkOut} · {updateModal.nights} nights<br />
-                <strong style={{ color: "#1e293b" }}>${updateModal.totalPrice}</strong>
-              </div>
-            </div>
-            <label className="hs-form-label">New Status</label>
-            <select className="hs-form-control" style={{ marginBottom: 20 }}
-              value={newStatus} onChange={e => setNewStatus(e.target.value as any)}>
-              <option value="Pending">Pending</option>
-              <option value="Confirmed">Confirmed</option>
-              <option value="Cancelled">Cancelled</option>
-            </select>
-            <div style={{ display: "flex", gap: 10 }}>
-              <button onClick={handleUpdateStatus} className="btn-primary-hs" style={{ flex: 1 }}>
-                Update Status
-              </button>
-              <button onClick={() => setUpdateModal(null)} className="btn-outline-hs" style={{ flex: 1 }}>
-                Cancel
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <BookingReviewDialog
+        booking={selectedBooking}
+        title="Review booking payment"
+        submitLabel="Save review"
+        isSubmitting={isSubmitting}
+        onClose={() => setSelectedBooking(null)}
+        onSubmit={handleReview}
+      />
+
+      <BookingChatDialog
+        booking={chatBooking}
+        scope="admin"
+        title="Booking Chat"
+        onClose={() => setChatBooking(null)}
+      />
     </div>
   );
 }

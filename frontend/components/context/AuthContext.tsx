@@ -8,11 +8,13 @@ import {
   type ReactNode,
 } from "react";
 import {
+  changePassword as changePasswordRequest,
   getCurrentUser,
   getRedirectPath,
   login as loginRequest,
   logout as logoutRequest,
   register as registerRequest,
+  updateProfile as updateProfileRequest,
   type AuthUser,
 } from "@/services/authService";
 
@@ -37,6 +39,12 @@ interface RegisterResult {
   redirectTo?: string;
 }
 
+interface ActionResult {
+  success: boolean;
+  message?: string;
+  error?: string;
+}
+
 interface AuthContextType {
   user: AuthUser | null;
   isAuthenticated: boolean;
@@ -45,6 +53,20 @@ interface AuthContextType {
   register: (payload: RegisterPayload) => Promise<RegisterResult>;
   logout: () => Promise<void>;
   refreshUser: () => Promise<void>;
+  updateProfile: (payload: {
+    fullName: string;
+    email: string;
+    phone: string;
+    location?: string;
+    website?: string;
+    languages?: string;
+    bio?: string;
+  }) => Promise<ActionResult>;
+  changePassword: (payload: {
+    currentPassword: string;
+    newPassword: string;
+    confirmPassword: string;
+  }) => Promise<ActionResult>;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -141,6 +163,50 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }
 
+  async function updateProfile(payload: {
+    fullName: string;
+    email: string;
+    phone: string;
+    location?: string;
+    website?: string;
+    languages?: string;
+    bio?: string;
+  }): Promise<ActionResult> {
+    try {
+      const response = await updateProfileRequest(payload);
+      setUser(response.user);
+
+      return {
+        success: true,
+        message: response.message,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: getErrorMessage(error),
+      };
+    }
+  }
+
+  async function changePassword(payload: {
+    currentPassword: string;
+    newPassword: string;
+    confirmPassword: string;
+  }): Promise<ActionResult> {
+    try {
+      const response = await changePasswordRequest(payload);
+      return {
+        success: true,
+        message: response.message,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: getErrorMessage(error),
+      };
+    }
+  }
+
   return (
     <AuthContext.Provider
       value={{
@@ -151,6 +217,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         register,
         logout,
         refreshUser,
+        updateProfile,
+        changePassword,
       }}
     >
       {children}
