@@ -14,13 +14,13 @@ export function Navbar() {
   const dropdownRef = useRef<HTMLDivElement>(null);
   const pathname = usePathname();
   const router = useRouter();
-  const { user, isAuthenticated, logout } = useAuth();
+  const { user, isAuthenticated, isInitializing, logout } = useAuth();
 
   const isActive = (path: string) =>
     path === "/" ? pathname === "/" : pathname.startsWith(path);
 
-  const handleLogout = () => {
-    logout();
+  const handleLogout = async () => {
+    await logout();
     setDropdownOpen(false);
     setMenuOpen(false);
     router.push("/");
@@ -167,7 +167,7 @@ export function Navbar() {
 
           {/* Auth Section — Desktop */}
           <div style={{ display: "flex", alignItems: "center", gap: 10 }} className="d-none d-md-flex">
-            {isAuthenticated && user ? (
+            {isInitializing ? null : isAuthenticated && user ? (
               user.role === "Admin" ? (
                 /* Admin: show go-to-panel button */
                 <Link href="/admin/dashboard">
@@ -215,7 +215,7 @@ export function Navbar() {
 
             <hr style={{ margin: "10px 0" }} />
 
-            {isAuthenticated && user ? (
+            {isInitializing ? null : isAuthenticated && user ? (
               <>
                 {/* Logged in mobile user info */}
                 <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", background: "#f8fafc", borderRadius: 10, marginBottom: 8 }}>

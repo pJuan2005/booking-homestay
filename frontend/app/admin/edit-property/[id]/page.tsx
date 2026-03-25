@@ -1,768 +1,767 @@
 "use client";
-import { useState, useRef } from "react";
-import { useParams, useRouter } from "next/navigation";
-import Link from "next/link";
-import {
-  ArrowLeft, Save, X, Home, MapPin, DollarSign, Users,
-  Tag, FileText, ImagePlus, CheckSquare, Shield, UploadCloud,
-  AlertCircle, CheckCircle2
-} from "lucide-react";
-import { properties as initialProperties, Property } from "@/lib/mockData";
 
-const AMENITY_LIST = [
-  "WiFi", "Private Pool", "Full Kitchen", "Air Conditioning", "Parking",
-  "Beach Access", "Outdoor Shower", "BBQ Grill", "Fireplace", "Heating",
-  "Mountain View", "Hiking Trails", "Hot Tub", "City View", "Gym Access",
-  "Washer/Dryer", "Doorman", "Smart TV", "Workspace", "Infinity Pool",
-  "Beachfront", "Personal Concierge", "Chef on Request", "Spa", "Sauna",
-  "Forest View", "Kayaks", "Bikes", "Balcony", "Kitchenette",
-  "Rice Terrace View", "Breakfast Included", "Yoga Deck", "Eco Design",
-  "Bike Rental", "Cultural Tours", "Rooftop Terrace", "Concierge",
-  "Home Theater", "24/7 Support", "Self Check-in", "City Access",
-  "Elevator", "Washer"
+import { useEffect, useState } from "react";
+import Link from "next/link";
+import { useParams, useRouter } from "next/navigation";
+import { FileImage, ImagePlus, Save, Trash2, X } from "lucide-react";
+import {
+  deleteProperty,
+  getAdminPropertyById,
+  updateAdminProperty,
+} from "@/services/propertyService";
+import {
+  PROPERTY_TYPE_OPTIONS,
+  AMENITY_OPTIONS,
+  MAX_PROPERTY_IMAGE_COUNT,
+  MAX_PROPERTY_IMAGE_SIZE_MB,
+  buildImageSizeError,
+  validatePropertyForm,
+  createPropertyFormData,
+  createEmptyPropertyForm,
+  createPropertyFormFromDetail,
+  isImageFileTooLarge,
+  type PropertyFormErrors,
+} from "@/lib/propertyForm";
+
+type AdminPropertyDetail = Awaited<ReturnType<typeof getAdminPropertyById>>;
+
+const STATUS_OPTIONS = [
+  { value: "pending", label: "Pending" },
+  { value: "approved", label: "Approved" },
+  { value: "rejected", label: "Rejected" },
 ];
 
-const PROPERTY_TYPES = ["Villa", "Cabin", "Apartment", "Cottage", "Studio", "House", "Penthouse", "Guesthouse", "Bungalow"];
-
-type FormStatus = "idle" | "saving" | "success" | "error";
-
 export default function AdminEditPropertyPage() {
-  const params = useParams();
-  const id = params?.id as string;
+  const params = useParams<{ id: string }>();
   const router = useRouter();
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const propertyId = Number(params?.id);
 
-  const property = initialProperties.find(p => p.id === Number(id));
+  const [loading, setLoading] = useState(true);
+  const [property, setProperty] = useState<AdminPropertyDetail | null>(null);
+  const [form, setForm] = useState(createEmptyPropertyForm());
+  const [status, setStatus] = useState("pending");
+  const [coverImage, setCoverImage] = useState<File | null>(null);
+  const [detailImages, setDetailImages] = useState<File[]>([]);
+  const [existingDetailImages, setExistingDetailImages] = useState<string[]>([]);
+  const [removedDetailImages, setRemovedDetailImages] = useState<string[]>([]);
+  const [errors, setErrors] = useState<PropertyFormErrors>({});
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [generalError, setGeneralError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [coverPreview, setCoverPreview] = useState<string | null>(null);
 
-  const [formStatus, setFormStatus] = useState<FormStatus>("idle");
-  const [previewImages, setPreviewImages] = useState<string[]>(property?.images || []);
-  const [newImagePreviews, setNewImagePreviews] = useState<string[]>([]);
-  const [removedImages, setRemovedImages] = useState<string[]>([]);
+  useEffect(() => {
+    async function fetchProperty() {
+      try {
+        setLoading(true);
+        const data = await getAdminPropertyById(propertyId);
+        setProperty(data);
+        setForm(createPropertyFormFromDetail(data));
+        setStatus(String(data.status).toLowerCase());
+        setExistingDetailImages(data.images || []);
+      } catch (error) {
+        setGeneralError(
+          error instanceof Error
+            ? error.message
+            : "Unable to load the property details.",
+        );
+      } finally {
+        setLoading(false);
+      }
+    }
 
-  const [form, setForm] = useState<Omit<Property, "id" | "hostId" | "hostName" | "rating" | "reviews" | "featured" | "images" | "image">>({
-    title: property?.title || "",
-    location: property?.location || "",
-    city: property?.city || "",
-    country: property?.country || "",
-    price: property?.price || 0,
-    type: property?.type || "Villa",
-    description: property?.description || "",
-    amenities: property?.amenities || [],
-    maxGuests: property?.maxGuests || 1,
-    bedrooms: property?.bedrooms || 1,
-    bathrooms: property?.bathrooms || 1,
-    status: property?.status || "Pending",
-  });
+    if (Number.isInteger(propertyId) && propertyId > 0) {
+      fetchProperty();
+    } else {
+      setLoading(false);
+      setGeneralError("Invalid property ID.");
+    }
+  }, [propertyId]);
 
-  const [errors, setErrors] = useState<Record<string, string>>({});
+  useEffect(() => {
+    if (!coverImage) {
+      setCoverPreview(property?.image || null);
+      return;
+    }
 
-  if (!property) {
-    return (
-      <div style={{ padding: 40, textAlign: "center" }}>
-        <AlertCircle size={48} color="#dc2626" style={{ marginBottom: 12 }} />
-        <h4 style={{ color: "#1e293b" }}>Property Not Found</h4>
-        <p style={{ color: "#64748b" }}>The property with ID <strong>{id || "unknown"}</strong> does not exist.</p>
-        <Link href="/admin/properties-manage">
-          <button style={{
-            marginTop: 12, padding: "10px 24px", borderRadius: 8,
-            background: "#2563EB", color: "#fff", border: "none", cursor: "pointer", fontWeight: 700
-          }}>
-            ← Back to Properties
-          </button>
-        </Link>
-      </div>
+    const objectUrl = URL.createObjectURL(coverImage);
+    setCoverPreview(objectUrl);
+
+    return () => {
+      URL.revokeObjectURL(objectUrl);
+    };
+  }, [coverImage, property?.image]);
+
+  function updateField(
+    key: keyof typeof form,
+    value: string | string[],
+  ) {
+    setForm((prev) => ({ ...prev, [key]: value }));
+    setErrors((prev) => ({ ...prev, [key]: undefined }));
+  }
+
+  function toggleAmenity(amenity: string) {
+    setForm((prev) => ({
+      ...prev,
+      amenities: prev.amenities.includes(amenity)
+        ? prev.amenities.filter((item) => item !== amenity)
+        : [...prev.amenities, amenity],
+    }));
+  }
+
+  function removeExistingDetailImage(image: string) {
+    setExistingDetailImages((prev) => prev.filter((item) => item !== image));
+    setRemovedDetailImages((prev) =>
+      prev.includes(image) ? prev : [...prev, image],
     );
   }
 
-  const validate = () => {
-    const e: Record<string, string> = {};
-    if (!form.title.trim()) e.title = "Property name is required.";
-    if (!form.location.trim()) e.location = "Address is required.";
-    if (!form.city.trim()) e.city = "City is required.";
-    if (!form.country.trim()) e.country = "Country is required.";
-    if (!form.price || form.price <= 0) e.price = "Price must be greater than 0.";
-    if (!form.description.trim()) e.description = "Description is required.";
-    if (form.maxGuests < 1) e.maxGuests = "At least 1 guest required.";
-    return e;
-  };
+  function removeNewDetailImage(index: number) {
+    setDetailImages((prev) => prev.filter((_, itemIndex) => itemIndex !== index));
+  }
 
-  const handleChange = (field: string, value: string | number | string[]) => {
-    setForm(prev => ({ ...prev, [field]: value }));
-    if (errors[field]) setErrors(prev => { const n = { ...prev }; delete n[field]; return n; });
-  };
+  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
 
-  const toggleAmenity = (amenity: string) => {
-    setForm(prev => ({
-      ...prev,
-      amenities: prev.amenities.includes(amenity)
-        ? prev.amenities.filter(a => a !== amenity)
-        : [...prev.amenities, amenity]
-    }));
-  };
-
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files || []);
-    files.forEach(file => {
-      const reader = new FileReader();
-      reader.onload = ev => {
-        setNewImagePreviews(prev => [...prev, ev.target?.result as string]);
-      };
-      reader.readAsDataURL(file);
+    const validateErrors = validatePropertyForm(form, {
+      requireCoverImage: true,
+      hasCoverImage: Boolean(coverImage || property?.image),
     });
-  };
 
-  const removeExistingImage = (src: string) => {
-    setPreviewImages(prev => prev.filter(img => img !== src));
-    setRemovedImages(prev => [...prev, src]);
-  };
-
-  const removeNewImage = (index: number) => {
-    setNewImagePreviews(prev => prev.filter((_, i) => i !== index));
-  };
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    const validation = validate();
-    if (Object.keys(validation).length > 0) {
-      setErrors(validation);
+    if (Object.keys(validateErrors).length > 0) {
+      setErrors(validateErrors);
+      setGeneralError("Please review the property information before saving.");
       return;
     }
-    setFormStatus("saving");
-    setTimeout(() => {
-      setFormStatus("success");
-      setTimeout(() => router.push("/admin/properties-manage"), 1800);
-    }, 1200);
-  };
 
-  const inputStyle = (field?: string): React.CSSProperties => ({
-    width: "100%",
-    padding: "9px 13px",
-    border: `1.5px solid ${field && errors[field] ? "#dc2626" : "#e2e8f0"}`,
-    borderRadius: 8,
-    fontSize: "0.9rem",
-    color: "#1e293b",
-    background: "#f8fafc",
-    outline: "none",
-    transition: "border 0.2s",
-  });
+    try {
+      setIsSubmitting(true);
+      setGeneralError(null);
 
-  const labelStyle: React.CSSProperties = {
-    display: "block",
-    fontWeight: 700,
-    color: "#374151",
-    fontSize: "0.84rem",
-    marginBottom: 5,
-  };
+      const formData = createPropertyFormData({
+        form,
+        status,
+        coverImage,
+        detailImages,
+        removedDetailImages,
+      });
 
-  const cardStyle: React.CSSProperties = {
-    background: "#fff",
-    borderRadius: 12,
-    border: "1px solid #e2e8f0",
-    boxShadow: "0 2px 10px rgba(0,0,0,0.05)",
-    marginBottom: 20,
-    overflow: "hidden",
-  };
+      const response = await updateAdminProperty(propertyId, formData);
+      const data = response.data as AdminPropertyDetail;
 
-  const cardHeaderStyle: React.CSSProperties = {
-    padding: "14px 20px",
-    borderBottom: "1px solid #f1f5f9",
-    background: "linear-gradient(135deg, #f8fafc, #eff6ff)",
-    display: "flex",
-    alignItems: "center",
-    gap: 8,
-  };
+      setProperty(data);
+      setForm(createPropertyFormFromDetail(data));
+      setStatus(String(data.status).toLowerCase());
+      setExistingDetailImages(data.images || []);
+      setRemovedDetailImages([]);
+      setDetailImages([]);
+      setCoverImage(null);
+      setErrors({});
+      setNotice("Property updated successfully.");
+    } catch (error) {
+      setGeneralError(
+        error instanceof Error ? error.message : "Unable to update the property.",
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
 
-  const cardBodyStyle: React.CSSProperties = {
-    padding: "20px",
-  };
+  async function handleDelete() {
+    const confirmed = window.confirm(
+      "Are you sure you want to delete this property? It will be hidden from the system.",
+    );
 
-  const statusColors: Record<string, { bg: string; color: string; border: string }> = {
-    Approved: { bg: "#dcfce7", color: "#16a34a", border: "#86efac" },
-    Pending:  { bg: "#fef3c7", color: "#d97706", border: "#fcd34d" },
-    Rejected: { bg: "#fee2e2", color: "#dc2626", border: "#fca5a5" },
-  };
+    if (!confirmed) {
+      return;
+    }
 
-  const currentStatus = statusColors[form.status] || statusColors.Pending;
+    try {
+      setIsDeleting(true);
+      await deleteProperty(propertyId);
+      router.push("/admin/properties-manage");
+    } catch (error) {
+      setGeneralError(
+        error instanceof Error ? error.message : "Unable to delete the property.",
+      );
+      setIsDeleting(false);
+    }
+  }
+
+  if (loading) {
+    return <PageState message="Loading property data..." />;
+  }
+
+  if (!property) {
+    return (
+      <PageState
+        message={generalError || "Property not found."}
+        action={
+          <Link href="/admin/properties-manage" className="btn-primary-hs">
+            Back to property list
+          </Link>
+        }
+      />
+    );
+  }
 
   return (
-    <div style={{ padding: "24px", maxWidth: 1100, margin: "0 auto" }}>
-
-      {/* ── Page Header ── */}
-      <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 24, flexWrap: "wrap" }}>
-        <Link href="/admin/properties-manage" style={{ textDecoration: "none" }}>
-          <button style={{
-            padding: "8px 14px", borderRadius: 8, border: "1.5px solid #e2e8f0",
-            background: "#fff", cursor: "pointer", display: "flex", alignItems: "center",
-            gap: 6, color: "#64748b", fontWeight: 600, fontSize: "0.85rem"
-          }}>
-            <ArrowLeft size={15} /> Back
-          </button>
-        </Link>
-        <div style={{ flex: 1 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: "0.75rem", color: "#94a3b8", marginBottom: 2 }}>
-            <Shield size={12} color="#2563EB" />
-            <span>Admin Panel</span>
-            <span>/</span>
-            <Link href="/admin/properties-manage" style={{ color: "#2563EB", textDecoration: "none" }}>Manage Properties</Link>
-            <span>/</span>
-            <span style={{ color: "#64748b" }}>Edit Property</span>
-          </div>
-          <h1 style={{ fontWeight: 800, color: "#1e293b", margin: 0, fontSize: "1.45rem" }}>
+    <div style={{ padding: "28px", maxWidth: 1040, margin: "0 auto" }}>
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          gap: 16,
+          alignItems: "flex-start",
+          marginBottom: 24,
+          flexWrap: "wrap",
+        }}
+      >
+        <div>
+          <h1
+            style={{
+              fontWeight: 800,
+              color: "#1e293b",
+              marginBottom: 4,
+              fontSize: "1.5rem",
+            }}
+          >
             Edit Property
           </h1>
-          <p style={{ color: "#64748b", margin: 0, fontSize: "0.85rem" }}>
-            ID #{property.id} — <strong>{property.title}</strong>
+          <p style={{ color: "#64748b", margin: 0 }}>
+            Hosted by <strong>{property.hostName}</strong>
           </p>
         </div>
-
-        {/* Current Status Badge */}
-        <div style={{
-          padding: "6px 16px", borderRadius: 20,
-          background: currentStatus.bg, border: `1.5px solid ${currentStatus.border}`,
-          color: currentStatus.color, fontWeight: 700, fontSize: "0.82rem",
-          display: "flex", alignItems: "center", gap: 5
-        }}>
-          <span style={{ width: 7, height: 7, borderRadius: "50%", background: currentStatus.color, display: "inline-block" }} />
-          {form.status}
-        </div>
+        <Link href="/admin/properties-manage" className="btn-outline-hs">
+          Back
+        </Link>
       </div>
 
-      {/* ── Success Banner ── */}
-      {formStatus === "success" && (
-        <div style={{
-          background: "#dcfce7", border: "1.5px solid #86efac", borderRadius: 10,
-          padding: "14px 20px", marginBottom: 20, display: "flex", alignItems: "center", gap: 10
-        }}>
-          <CheckCircle2 size={20} color="#16a34a" />
-          <div>
-            <div style={{ fontWeight: 700, color: "#15803d" }}>Changes Saved Successfully!</div>
-            <div style={{ fontSize: "0.82rem", color: "#16a34a" }}>Redirecting to Manage Properties...</div>
-          </div>
+      {notice && (
+        <div
+          style={{
+            marginBottom: 18,
+            padding: "12px 16px",
+            borderRadius: 10,
+            background: "#dcfce7",
+            color: "#166534",
+            fontWeight: 600,
+          }}
+        >
+          {notice}
         </div>
       )}
 
-      <form onSubmit={handleSubmit} noValidate>
-        <div className="row g-4">
+      {generalError && (
+        <div
+          style={{
+            marginBottom: 18,
+            padding: "12px 16px",
+            borderRadius: 10,
+            background: "#fee2e2",
+            color: "#b91c1c",
+            fontWeight: 600,
+          }}
+        >
+          {generalError}
+        </div>
+      )}
 
-          {/* ═══ LEFT COLUMN ═══ */}
-          <div className="col-12 col-lg-8">
-
-            {/* ── Basic Info Card ── */}
-            <div style={cardStyle}>
-              <div style={cardHeaderStyle}>
-                <Home size={16} color="#2563EB" />
-                <span style={{ fontWeight: 700, color: "#1e293b", fontSize: "0.92rem" }}>Basic Information</span>
-              </div>
-              <div style={cardBodyStyle}>
-                <div className="row g-3">
-
-                  <div className="col-12">
-                    <label style={labelStyle}>
-                      Property Name <span style={{ color: "#dc2626" }}>*</span>
-                    </label>
-                    <input
-                      type="text"
-                      style={inputStyle("title")}
-                      value={form.title}
-                      onChange={e => handleChange("title", e.target.value)}
-                      placeholder="e.g. Tropical Villa with Private Pool"
-                    />
-                    {errors.title && <div style={{ color: "#dc2626", fontSize: "0.78rem", marginTop: 4 }}>{errors.title}</div>}
-                  </div>
-
-                  <div className="col-12">
-                    <label style={labelStyle}>
-                      <MapPin size={13} style={{ marginRight: 4 }} />
-                      Full Address <span style={{ color: "#dc2626" }}>*</span>
-                    </label>
-                    <input
-                      type="text"
-                      style={inputStyle("location")}
-                      value={form.location}
-                      onChange={e => handleChange("location", e.target.value)}
-                      placeholder="e.g. Seminyak, Bali, Indonesia"
-                    />
-                    {errors.location && <div style={{ color: "#dc2626", fontSize: "0.78rem", marginTop: 4 }}>{errors.location}</div>}
-                  </div>
-
-                  <div className="col-6">
-                    <label style={labelStyle}>City <span style={{ color: "#dc2626" }}>*</span></label>
-                    <input
-                      type="text"
-                      style={inputStyle("city")}
-                      value={form.city}
-                      onChange={e => handleChange("city", e.target.value)}
-                      placeholder="e.g. Bali"
-                    />
-                    {errors.city && <div style={{ color: "#dc2626", fontSize: "0.78rem", marginTop: 4 }}>{errors.city}</div>}
-                  </div>
-
-                  <div className="col-6">
-                    <label style={labelStyle}>Country <span style={{ color: "#dc2626" }}>*</span></label>
-                    <input
-                      type="text"
-                      style={inputStyle("country")}
-                      value={form.country}
-                      onChange={e => handleChange("country", e.target.value)}
-                      placeholder="e.g. Indonesia"
-                    />
-                    {errors.country && <div style={{ color: "#dc2626", fontSize: "0.78rem", marginTop: 4 }}>{errors.country}</div>}
-                  </div>
-
-                  <div className="col-6 col-sm-4">
-                    <label style={labelStyle}>
-                      <DollarSign size={13} style={{ marginRight: 3 }} />
-                      Price / Night <span style={{ color: "#dc2626" }}>*</span>
-                    </label>
-                    <div style={{ position: "relative" }}>
-                      <span style={{
-                        position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)",
-                        color: "#94a3b8", fontWeight: 700, fontSize: "0.9rem"
-                      }}>$</span>
-                      <input
-                        type="number"
-                        min={1}
-                        style={{ ...inputStyle("price"), paddingLeft: 26 }}
-                        value={form.price}
-                        onChange={e => handleChange("price", Number(e.target.value))}
-                      />
-                    </div>
-                    {errors.price && <div style={{ color: "#dc2626", fontSize: "0.78rem", marginTop: 4 }}>{errors.price}</div>}
-                  </div>
-
-                  <div className="col-6 col-sm-4">
-                    <label style={labelStyle}>
-                      <Tag size={13} style={{ marginRight: 3 }} />
-                      Property Type
-                    </label>
-                    <select
-                      style={{ ...inputStyle(), cursor: "pointer" }}
-                      value={form.type}
-                      onChange={e => handleChange("type", e.target.value)}
-                    >
-                      {PROPERTY_TYPES.map(t => (
-                        <option key={t} value={t}>{t}</option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div className="col-6 col-sm-4">
-                    <label style={labelStyle}>
-                      <Users size={13} style={{ marginRight: 3 }} />
-                      Max Guests <span style={{ color: "#dc2626" }}>*</span>
-                    </label>
-                    <input
-                      type="number"
-                      min={1}
-                      max={30}
-                      style={inputStyle("maxGuests")}
-                      value={form.maxGuests}
-                      onChange={e => handleChange("maxGuests", Number(e.target.value))}
-                    />
-                    {errors.maxGuests && <div style={{ color: "#dc2626", fontSize: "0.78rem", marginTop: 4 }}>{errors.maxGuests}</div>}
-                  </div>
-
-                  <div className="col-6">
-                    <label style={labelStyle}>Bedrooms</label>
-                    <input
-                      type="number"
-                      min={0}
-                      max={20}
-                      style={inputStyle()}
-                      value={form.bedrooms}
-                      onChange={e => handleChange("bedrooms", Number(e.target.value))}
-                    />
-                  </div>
-
-                  <div className="col-6">
-                    <label style={labelStyle}>Bathrooms</label>
-                    <input
-                      type="number"
-                      min={0}
-                      max={20}
-                      style={inputStyle()}
-                      value={form.bathrooms}
-                      onChange={e => handleChange("bathrooms", Number(e.target.value))}
-                    />
-                  </div>
-
-                </div>
-              </div>
-            </div>
-
-            {/* ── Description Card ── */}
-            <div style={cardStyle}>
-              <div style={cardHeaderStyle}>
-                <FileText size={16} color="#2563EB" />
-                <span style={{ fontWeight: 700, color: "#1e293b", fontSize: "0.92rem" }}>Property Description</span>
-              </div>
-              <div style={cardBodyStyle}>
-                <label style={labelStyle}>
-                  Description <span style={{ color: "#dc2626" }}>*</span>
-                </label>
-                <textarea
-                  rows={6}
-                  style={{ ...inputStyle("description"), resize: "vertical", lineHeight: 1.7 }}
-                  value={form.description}
-                  onChange={e => handleChange("description", e.target.value)}
-                  placeholder="Describe the property in detail..."
+      <form onSubmit={handleSubmit} className="row g-4">
+        <div className="col-lg-8">
+          <div className="hs-card" style={{ padding: "24px", marginBottom: 20 }}>
+            <h3 style={{ fontWeight: 700, color: "#1e293b", marginBottom: 18 }}>
+              Basic information
+            </h3>
+            <div className="row g-3">
+              <div className="col-12">
+                <label className="hs-form-label">Property title</label>
+                <input
+                  className="hs-form-control"
+                  value={form.title}
+                  onChange={(event) => updateField("title", event.target.value)}
                 />
-                {errors.description && <div style={{ color: "#dc2626", fontSize: "0.78rem", marginTop: 4 }}>{errors.description}</div>}
-                <div style={{ textAlign: "right", fontSize: "0.78rem", color: "#94a3b8", marginTop: 4 }}>
-                  {form.description.length} characters
-                </div>
+                {errors.title && <ErrorText message={errors.title} />}
               </div>
-            </div>
 
-            {/* ── Amenities Card ── */}
-            <div style={cardStyle}>
-              <div style={cardHeaderStyle}>
-                <CheckSquare size={16} color="#2563EB" />
-                <span style={{ fontWeight: 700, color: "#1e293b", fontSize: "0.92rem" }}>Amenities</span>
-                <span style={{
-                  marginLeft: "auto", background: "#eff6ff", color: "#2563EB",
-                  borderRadius: 20, padding: "2px 10px", fontSize: "0.75rem", fontWeight: 700
-                }}>
-                  {form.amenities.length} selected
-                </span>
-              </div>
-              <div style={cardBodyStyle}>
-                <div style={{
-                  display: "grid",
-                  gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))",
-                  gap: "8px 12px"
-                }}>
-                  {AMENITY_LIST.map(amenity => {
-                    const checked = form.amenities.includes(amenity);
-                    return (
-                      <label
-                        key={amenity}
-                        style={{
-                          display: "flex", alignItems: "center", gap: 8,
-                          padding: "8px 12px", borderRadius: 8, cursor: "pointer",
-                          border: `1.5px solid ${checked ? "#93c5fd" : "#e2e8f0"}`,
-                          background: checked ? "#eff6ff" : "#f8fafc",
-                          transition: "all 0.15s", userSelect: "none"
-                        }}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={checked}
-                          onChange={() => toggleAmenity(amenity)}
-                          style={{ accentColor: "#2563EB", width: 14, height: 14, cursor: "pointer" }}
-                        />
-                        <span style={{
-                          fontSize: "0.82rem", fontWeight: checked ? 700 : 500,
-                          color: checked ? "#1d4ed8" : "#475569"
-                        }}>
-                          {amenity}
-                        </span>
-                      </label>
-                    );
-                  })}
-                </div>
-              </div>
-            </div>
-
-            {/* ── Images Card ── */}
-            <div style={cardStyle}>
-              <div style={cardHeaderStyle}>
-                <ImagePlus size={16} color="#2563EB" />
-                <span style={{ fontWeight: 700, color: "#1e293b", fontSize: "0.92rem" }}>Property Images</span>
-              </div>
-              <div style={cardBodyStyle}>
-
-                {/* Existing images */}
-                {previewImages.length > 0 && (
-                  <div style={{ marginBottom: 20 }}>
-                    <div style={{ fontWeight: 600, color: "#374151", fontSize: "0.83rem", marginBottom: 10 }}>
-                      Current Images ({previewImages.length})
-                    </div>
-                    <div style={{
-                      display: "grid",
-                      gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))",
-                      gap: 10
-                    }}>
-                      {previewImages.map((src, idx) => (
-                        <div key={idx} style={{ position: "relative", borderRadius: 10, overflow: "hidden", border: "2px solid #e2e8f0" }}>
-                          <img
-                            src={src}
-                            alt={`img-${idx}`}
-                            style={{ width: "100%", height: 100, objectFit: "cover", display: "block" }}
-                          />
-                          {idx === 0 && (
-                            <div style={{
-                              position: "absolute", top: 6, left: 6,
-                              background: "#2563EB", color: "#fff",
-                              fontSize: "0.68rem", fontWeight: 700,
-                              padding: "2px 7px", borderRadius: 10
-                            }}>
-                              Main
-                            </div>
-                          )}
-                          <button
-                            type="button"
-                            onClick={() => removeExistingImage(src)}
-                            style={{
-                              position: "absolute", top: 6, right: 6,
-                              width: 22, height: 22, borderRadius: "50%",
-                              background: "#dc2626", border: "none", color: "#fff",
-                              cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center"
-                            }}
-                          >
-                            <X size={12} />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* New images */}
-                {newImagePreviews.length > 0 && (
-                  <div style={{ marginBottom: 20 }}>
-                    <div style={{ fontWeight: 600, color: "#374151", fontSize: "0.83rem", marginBottom: 10 }}>
-                      New Images to Upload ({newImagePreviews.length})
-                    </div>
-                    <div style={{
-                      display: "grid",
-                      gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))",
-                      gap: 10
-                    }}>
-                      {newImagePreviews.map((src, idx) => (
-                        <div key={idx} style={{ position: "relative", borderRadius: 10, overflow: "hidden", border: "2px dashed #93c5fd" }}>
-                          <img
-                            src={src}
-                            alt={`new-${idx}`}
-                            style={{ width: "100%", height: 100, objectFit: "cover", display: "block" }}
-                          />
-                          <div style={{
-                            position: "absolute", top: 6, left: 6,
-                            background: "#16a34a", color: "#fff",
-                            fontSize: "0.68rem", fontWeight: 700,
-                            padding: "2px 7px", borderRadius: 10
-                          }}>
-                            New
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => removeNewImage(idx)}
-                            style={{
-                              position: "absolute", top: 6, right: 6,
-                              width: 22, height: 22, borderRadius: "50%",
-                              background: "#dc2626", border: "none", color: "#fff",
-                              cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center"
-                            }}
-                          >
-                            <X size={12} />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Upload zone */}
-                <div
-                  onClick={() => fileInputRef.current?.click()}
-                  style={{
-                    border: "2px dashed #93c5fd",
-                    borderRadius: 10,
-                    padding: "28px 20px",
-                    textAlign: "center",
-                    cursor: "pointer",
-                    background: "#f0f9ff",
-                    transition: "background 0.2s"
-                  }}
-                  onMouseEnter={e => (e.currentTarget.style.background = "#e0f2fe")}
-                  onMouseLeave={e => (e.currentTarget.style.background = "#f0f9ff")}
+              <div className="col-md-6">
+                <label className="hs-form-label">Property type</label>
+                <select
+                  className="hs-form-control"
+                  value={form.type}
+                  onChange={(event) => updateField("type", event.target.value)}
                 >
-                  <UploadCloud size={32} color="#60a5fa" style={{ marginBottom: 8 }} />
-                  <div style={{ fontWeight: 700, color: "#1d4ed8", fontSize: "0.9rem" }}>
-                    Click to Upload New Images
-                  </div>
-                  <div style={{ color: "#64748b", fontSize: "0.78rem", marginTop: 4 }}>
-                    PNG, JPG, WEBP — max 5MB each
-                  </div>
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept="image/*"
-                    multiple
-                    style={{ display: "none" }}
-                    onChange={handleImageUpload}
-                  />
-                </div>
+                  {PROPERTY_TYPE_OPTIONS.map((type) => (
+                    <option key={type} value={type}>
+                      {type}
+                    </option>
+                  ))}
+                </select>
+                {errors.type && <ErrorText message={errors.type} />}
+              </div>
+
+              <div className="col-md-6">
+                <label className="hs-form-label">Price per night</label>
+                <input
+                  type="number"
+                  min="1"
+                  className="hs-form-control"
+                  value={form.price}
+                  onChange={(event) => updateField("price", event.target.value)}
+                />
+                {errors.price && <ErrorText message={errors.price} />}
+              </div>
+
+              <div className="col-12">
+                <label className="hs-form-label">Address</label>
+                <input
+                  className="hs-form-control"
+                  value={form.address}
+                  onChange={(event) => updateField("address", event.target.value)}
+                />
+                {errors.address && <ErrorText message={errors.address} />}
+              </div>
+
+              <div className="col-md-6">
+                <label className="hs-form-label">City</label>
+                <input
+                  className="hs-form-control"
+                  value={form.city}
+                  onChange={(event) => updateField("city", event.target.value)}
+                />
+                {errors.city && <ErrorText message={errors.city} />}
+              </div>
+
+              <div className="col-md-6">
+                <label className="hs-form-label">Country</label>
+                <input
+                  className="hs-form-control"
+                  value={form.country}
+                  onChange={(event) => updateField("country", event.target.value)}
+                />
+                {errors.country && <ErrorText message={errors.country} />}
               </div>
             </div>
-
           </div>
 
-          {/* ═══ RIGHT COLUMN ═══ */}
-          <div className="col-12 col-lg-4">
-
-            {/* ── Status & Actions Card ── */}
-            <div style={{ ...cardStyle, position: "sticky", top: 20 }}>
-              <div style={cardHeaderStyle}>
-                <Shield size={16} color="#2563EB" />
-                <span style={{ fontWeight: 700, color: "#1e293b", fontSize: "0.92rem" }}>Status & Actions</span>
+          <div className="hs-card" style={{ padding: "24px", marginBottom: 20 }}>
+            <h3 style={{ fontWeight: 700, color: "#1e293b", marginBottom: 18 }}>
+              Capacity details
+            </h3>
+            <div className="row g-3">
+              <div className="col-md-4">
+                <label className="hs-form-label">Maximum guests</label>
+                <input
+                  type="number"
+                  min="1"
+                  className="hs-form-control"
+                  value={form.maxGuests}
+                  onChange={(event) => updateField("maxGuests", event.target.value)}
+                />
+                {errors.maxGuests && <ErrorText message={errors.maxGuests} />}
               </div>
-              <div style={cardBodyStyle}>
 
-                {/* Status selector */}
-                <label style={labelStyle}>Listing Status</label>
-                <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 20 }}>
-                  {(["Approved", "Pending", "Rejected"] as const).map(s => {
-                    const sc = statusColors[s];
-                    const isSelected = form.status === s;
-                    return (
-                      <label
-                        key={s}
-                        style={{
-                          display: "flex", alignItems: "center", gap: 10,
-                          padding: "10px 14px", borderRadius: 8, cursor: "pointer",
-                          border: `1.5px solid ${isSelected ? sc.border : "#e2e8f0"}`,
-                          background: isSelected ? sc.bg : "#f8fafc",
-                          transition: "all 0.15s"
-                        }}
-                      >
-                        <input
-                          type="radio"
-                          name="status"
-                          value={s}
-                          checked={isSelected}
-                          onChange={() => handleChange("status", s)}
-                          style={{ accentColor: sc.color, width: 15, height: 15 }}
-                        />
-                        <div>
-                          <div style={{
-                            fontWeight: 700, fontSize: "0.84rem",
-                            color: isSelected ? sc.color : "#374151"
-                          }}>{s}</div>
-                          <div style={{ fontSize: "0.73rem", color: "#94a3b8" }}>
-                            {s === "Approved" && "Property is live and bookable"}
-                            {s === "Pending" && "Awaiting admin review"}
-                            {s === "Rejected" && "Not visible to guests"}
-                          </div>
-                        </div>
-                      </label>
-                    );
-                  })}
-                </div>
+              <div className="col-md-4">
+                <label className="hs-form-label">Bedrooms</label>
+                <input
+                  type="number"
+                  min="0"
+                  className="hs-form-control"
+                  value={form.bedrooms}
+                  onChange={(event) => updateField("bedrooms", event.target.value)}
+                />
+                {errors.bedrooms && <ErrorText message={errors.bedrooms} />}
+              </div>
 
-                {/* Action Buttons */}
-                <button
-                  type="submit"
-                  disabled={formStatus === "saving" || formStatus === "success"}
-                  style={{
-                    width: "100%",
-                    padding: "12px",
-                    borderRadius: 9,
-                    border: "none",
-                    background: formStatus === "success"
-                      ? "linear-gradient(135deg, #16a34a, #15803d)"
-                      : "linear-gradient(135deg, #2563EB, #1d4ed8)",
-                    color: "#fff",
-                    fontWeight: 800,
-                    fontSize: "0.95rem",
-                    cursor: formStatus === "saving" ? "not-allowed" : "pointer",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    gap: 8,
-                    marginBottom: 10,
-                    transition: "opacity 0.2s",
-                    opacity: formStatus === "saving" ? 0.8 : 1,
-                  }}
-                >
-                  {formStatus === "saving" ? (
-                    <>
-                      <span
-                        style={{
-                          width: 16, height: 16, border: "2.5px solid rgba(255,255,255,0.4)",
-                          borderTopColor: "#fff", borderRadius: "50%",
-                          animation: "spin 0.7s linear infinite", display: "inline-block"
-                        }}
-                      />
-                      Saving Changes...
-                    </>
-                  ) : formStatus === "success" ? (
-                    <><CheckCircle2 size={16} /> Saved!</>
-                  ) : (
-                    <><Save size={16} /> Save Changes</>
-                  )}
-                </button>
+              <div className="col-md-4">
+                <label className="hs-form-label">Bathrooms</label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.5"
+                  className="hs-form-control"
+                  value={form.bathrooms}
+                  onChange={(event) => updateField("bathrooms", event.target.value)}
+                />
+                {errors.bathrooms && <ErrorText message={errors.bathrooms} />}
+              </div>
 
-                <Link href="/admin/properties-manage" style={{ display: "block", textDecoration: "none" }}>
-                  <button
-                    type="button"
+              <div className="col-12">
+                <label className="hs-form-label">Description</label>
+                <textarea
+                  className="hs-form-control"
+                  rows={6}
+                  value={form.description}
+                  onChange={(event) => updateField("description", event.target.value)}
+                  style={{ resize: "vertical" }}
+                />
+                {errors.description && <ErrorText message={errors.description} />}
+              </div>
+            </div>
+          </div>
+
+          <div className="hs-card" style={{ padding: "24px", marginBottom: 20 }}>
+            <h3 style={{ fontWeight: 700, color: "#1e293b", marginBottom: 10 }}>
+              Amenities
+            </h3>
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))",
+                gap: 10,
+              }}
+            >
+              {AMENITY_OPTIONS.map((amenity) => {
+                const selected = form.amenities.includes(amenity);
+
+                return (
+                  <label
+                    key={amenity}
                     style={{
-                      width: "100%",
-                      padding: "11px",
-                      borderRadius: 9,
-                      border: "1.5px solid #e2e8f0",
-                      background: "#fff",
-                      color: "#64748b",
-                      fontWeight: 700,
-                      fontSize: "0.9rem",
-                      cursor: "pointer",
                       display: "flex",
                       alignItems: "center",
-                      justifyContent: "center",
-                      gap: 7,
+                      gap: 8,
+                      padding: "10px 14px",
+                      border: `1.5px solid ${selected ? "#2563eb" : "#e2e8f0"}`,
+                      borderRadius: 8,
+                      cursor: "pointer",
+                      background: selected ? "#eff6ff" : "#fff",
+                      color: selected ? "#2563eb" : "#475569",
+                      fontWeight: selected ? 600 : 400,
                     }}
                   >
-                    <X size={15} /> Cancel
-                  </button>
-                </Link>
-              </div>
+                    <input
+                      type="checkbox"
+                      checked={selected}
+                      onChange={() => toggleAmenity(amenity)}
+                      style={{ accentColor: "#2563eb" }}
+                    />
+                    {amenity}
+                  </label>
+                );
+              })}
             </div>
+          </div>
+        </div>
 
-            {/* ── Property Snapshot ── */}
-            <div style={{ ...cardStyle, marginTop: 20 }}>
-              <div style={cardHeaderStyle}>
-                <Home size={16} color="#7c3aed" />
-                <span style={{ fontWeight: 700, color: "#1e293b", fontSize: "0.92rem" }}>Property Snapshot</span>
+        <div className="col-lg-4">
+          <div className="hs-card" style={{ padding: "24px", marginBottom: 20 }}>
+            <h3 style={{ fontWeight: 700, color: "#1e293b", marginBottom: 14 }}>
+              Listing status
+            </h3>
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              {STATUS_OPTIONS.map((item) => (
+                <label
+                  key={item.value}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 10,
+                    padding: "10px 14px",
+                    borderRadius: 10,
+                    border: `1.5px solid ${
+                      status === item.value ? "#2563eb" : "#e2e8f0"
+                    }`,
+                    background: status === item.value ? "#eff6ff" : "#fff",
+                    cursor: "pointer",
+                  }}
+                >
+                  <input
+                    type="radio"
+                    name="status"
+                    checked={status === item.value}
+                    onChange={() => setStatus(item.value)}
+                    style={{ accentColor: "#2563eb" }}
+                  />
+                  <span
+                    style={{
+                      fontWeight: 600,
+                      color: status === item.value ? "#2563eb" : "#475569",
+                    }}
+                  >
+                    {item.label}
+                  </span>
+                </label>
+              ))}
+            </div>
+          </div>
+
+          <div className="hs-card" style={{ padding: "24px", marginBottom: 20 }}>
+            <h3 style={{ fontWeight: 700, color: "#1e293b", marginBottom: 14 }}>
+              Cover image
+            </h3>
+            <label
+              style={{
+                display: "block",
+                border: "2px dashed #bfdbfe",
+                borderRadius: 12,
+                padding: "18px",
+                background: "#f8fafc",
+                cursor: "pointer",
+                textAlign: "center",
+              }}
+            >
+              <FileImage size={26} color="#2563eb" style={{ marginBottom: 10 }} />
+              <div style={{ fontWeight: 700, color: "#1e293b", marginBottom: 4 }}>
+                Replace cover image
               </div>
-              <div style={{ padding: 0 }}>
+              <div style={{ color: "#94a3b8", fontSize: "0.82rem" }}>
+                Maximum {MAX_PROPERTY_IMAGE_SIZE_MB} MB.
+              </div>
+              <input
+                type="file"
+                accept="image/*"
+                style={{ display: "none" }}
+                onChange={(event) => {
+                  const file = event.target.files?.[0] || null;
+
+                  if (file && isImageFileTooLarge(file)) {
+                    setCoverImage(null);
+                    setErrors((prev) => ({
+                      ...prev,
+                      coverImage: `Cover image must be ${MAX_PROPERTY_IMAGE_SIZE_MB} MB or smaller.`,
+                    }));
+                    setGeneralError(buildImageSizeError(file));
+                    return;
+                  }
+
+                  setCoverImage(file);
+                  setGeneralError(null);
+                  setErrors((prev) => ({ ...prev, coverImage: undefined }));
+                }}
+              />
+            </label>
+            {errors.coverImage && <ErrorText message={errors.coverImage} />}
+
+            {coverPreview && (
+              <div style={{ marginTop: 14 }}>
                 <img
-                  src={property.image}
-                  alt={property.title}
-                  style={{ width: "100%", height: 150, objectFit: "cover" }}
+                  src={coverPreview}
+                  alt="Cover preview"
+                  style={{
+                    width: "100%",
+                    height: 200,
+                    objectFit: "cover",
+                    borderRadius: 10,
+                  }}
                 />
-                <div style={{ padding: "14px 16px" }}>
-                  <div style={{ fontSize: "0.8rem", color: "#94a3b8", marginBottom: 6 }}>Original data (read-only)</div>
-                  {[
-                    { label: "Host", value: property.hostName },
-                    { label: "Rating", value: `⭐ ${property.rating} (${property.reviews} reviews)` },
-                    { label: "Bedrooms", value: `${property.bedrooms} bed · ${property.bathrooms} bath` },
-                    { label: "Status", value: property.status },
-                  ].map(r => (
-                    <div key={r.label} style={{
-                      display: "flex", justifyContent: "space-between",
-                      padding: "5px 0", borderBottom: "1px solid #f1f5f9",
-                      fontSize: "0.82rem"
-                    }}>
-                      <span style={{ color: "#64748b" }}>{r.label}</span>
-                      <span style={{ fontWeight: 600, color: "#1e293b" }}>{r.value}</span>
-                    </div>
-                  ))}
-                </div>
               </div>
-            </div>
+            )}
+          </div>
 
+          <div className="hs-card" style={{ padding: "24px", marginBottom: 20 }}>
+            <h3 style={{ fontWeight: 700, color: "#1e293b", marginBottom: 14 }}>
+              Detail images
+            </h3>
+
+            {existingDetailImages.length > 0 && (
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+                  gap: 10,
+                  marginBottom: 16,
+                }}
+              >
+                {existingDetailImages.map((image) => (
+                  <div
+                    key={image}
+                    style={{
+                      position: "relative",
+                      borderRadius: 10,
+                      overflow: "hidden",
+                    }}
+                  >
+                    <img
+                      src={image}
+                      alt="Detail image"
+                      style={{ width: "100%", height: 110, objectFit: "cover" }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => removeExistingDetailImage(image)}
+                      style={{
+                        position: "absolute",
+                        top: 8,
+                        right: 8,
+                        border: "none",
+                        width: 28,
+                        height: 28,
+                        borderRadius: "50%",
+                        background: "rgba(220,38,38,0.9)",
+                        color: "#fff",
+                        cursor: "pointer",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                      }}
+                    >
+                      <X size={14} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <label
+              style={{
+                display: "block",
+                border: "2px dashed #cbd5e1",
+                borderRadius: 12,
+                padding: "18px",
+                background: "#fff",
+                cursor: "pointer",
+                textAlign: "center",
+              }}
+            >
+              <ImagePlus size={26} color="#2563eb" style={{ marginBottom: 10 }} />
+              <div style={{ fontWeight: 700, color: "#1e293b", marginBottom: 4 }}>
+                Add new detail images
+              </div>
+              <div style={{ color: "#94a3b8", fontSize: "0.82rem" }}>
+                Upload up to {MAX_PROPERTY_IMAGE_COUNT} images, each up to {MAX_PROPERTY_IMAGE_SIZE_MB} MB
+              </div>
+              <input
+                type="file"
+                accept="image/*"
+                multiple
+                style={{ display: "none" }}
+                onChange={(event) => {
+                  const files = Array.from(event.target.files || []);
+                  const oversizedFile = files.find(isImageFileTooLarge);
+                  if (oversizedFile) {
+                    setGeneralError(buildImageSizeError(oversizedFile));
+                    return;
+                  }
+
+                  setDetailImages((prev) => {
+                    const nextFiles = [...prev, ...files];
+
+                    if (
+                      existingDetailImages.length + nextFiles.length >
+                      MAX_PROPERTY_IMAGE_COUNT
+                    ) {
+                      setGeneralError(
+                        `You can upload up to ${MAX_PROPERTY_IMAGE_COUNT} detail images.`,
+                      );
+                      return prev;
+                    }
+
+                    setGeneralError(null);
+                    return nextFiles;
+                  });
+                }}
+              />
+            </label>
+
+            {detailImages.length > 0 && (
+              <div style={{ marginTop: 14, display: "flex", flexDirection: "column", gap: 8 }}>
+                {detailImages.map((file, index) => (
+                  <div
+                    key={`${file.name}-${index}`}
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      padding: "10px 12px",
+                      borderRadius: 8,
+                      background: "#f8fafc",
+                    }}
+                  >
+                    <div style={{ minWidth: 0 }}>
+                      <div
+                        style={{
+                          fontWeight: 600,
+                          color: "#1e293b",
+                          fontSize: "0.84rem",
+                          whiteSpace: "nowrap",
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                        }}
+                      >
+                        {file.name}
+                      </div>
+                      <div style={{ color: "#94a3b8", fontSize: "0.75rem" }}>
+                        {(file.size / 1024 / 1024).toFixed(2)} MB
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => removeNewDetailImage(index)}
+                      style={{
+                        border: "none",
+                        background: "transparent",
+                        color: "#dc2626",
+                        cursor: "pointer",
+                      }}
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="hs-card" style={{ padding: "24px" }}>
+            <h3 style={{ fontWeight: 700, color: "#1e293b", marginBottom: 10 }}>
+              Actions
+            </h3>
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              <button
+                type="submit"
+                className="btn-primary-hs"
+                disabled={isSubmitting}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: 6,
+                  opacity: isSubmitting ? 0.7 : 1,
+                }}
+              >
+                <Save size={16} />
+                {isSubmitting ? "Saving..." : "Save changes"}
+              </button>
+              <button
+                type="button"
+                className="btn-outline-hs"
+                onClick={handleDelete}
+                disabled={isDeleting}
+                style={{ color: "#dc2626", borderColor: "#fecaca" }}
+              >
+                {isDeleting ? "Deleting..." : "Delete property"}
+              </button>
+            </div>
           </div>
         </div>
       </form>
+    </div>
+  );
+}
 
-      <style>{`
-        @keyframes spin { to { transform: rotate(360deg); } }
-        input:focus, select:focus, textarea:focus {
-          border-color: #2563EB !important;
-          background: #fff !important;
-          box-shadow: 0 0 0 3px rgba(37,99,235,0.12);
-        }
-      `}</style>
+function ErrorText({ message }: { message: string }) {
+  return (
+    <div style={{ color: "#dc2626", fontSize: "0.78rem", marginTop: 4 }}>
+      {message}
+    </div>
+  );
+}
+
+function PageState({
+  message,
+  action,
+}: {
+  message: string;
+  action?: React.ReactNode;
+}) {
+  return (
+    <div style={{ padding: "48px 28px", textAlign: "center" }}>
+      <div style={{ maxWidth: 420, margin: "0 auto" }}>
+        <p style={{ color: "#475569", marginBottom: 18 }}>{message}</p>
+        {action}
+      </div>
     </div>
   );
 }

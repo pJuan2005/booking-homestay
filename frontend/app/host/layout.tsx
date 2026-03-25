@@ -3,7 +3,7 @@
 // TARGET: frontend/app/host/layout.tsx
 // ============================================================
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
 import {
@@ -24,17 +24,31 @@ const navItems = [
 export default function HostLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
-  const { user, logout } = useAuth();
+  const { user, logout, isInitializing } = useAuth();
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
 
   const isActive = (path: string) =>
     pathname === path || pathname.startsWith(path);
 
-  const handleLogout = () => {
-    logout();
-    router.push("/");
-  };
+  useEffect(() => {
+    if (!isInitializing && (!user || user.role !== "Host")) {
+      router.replace("/auth/login");
+    }
+  }, [isInitializing, router, user]);
+
+  async function handleLogout() {
+    await logout();
+    router.push("/auth/login");
+  }
+
+  if (isInitializing || !user || user.role !== "Host") {
+    return (
+      <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", color: "#64748b" }}>
+        Checking host access...
+      </div>
+    );
+  }
 
   const displayName = user?.name || "Made Wijaya";
   const initials = getUserInitials(displayName);

@@ -1,102 +1,193 @@
 "use client";
-// ============================================================
-// TARGET: frontend/app/host/add-property/page.tsx
-// ============================================================
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
-  MapPin, DollarSign, Users, FileText, Upload, CheckSquare,
-  Image, CheckCircle, ArrowRight, ArrowLeft
+  CheckCircle,
+  FileImage,
+  ImagePlus,
+  MapPin,
+  Save,
+  Trash2,
+  Users,
 } from "lucide-react";
-
-const AMENITIES = [
-  "WiFi", "Full Kitchen", "Air Conditioning", "Parking", "Pool",
-  "Beachfront", "Fireplace", "Washer/Dryer", "Gym Access", "Hot Tub",
-  "BBQ Grill", "Smart TV", "Workspace", "Elevator", "Breakfast Included",
-  "Pet Friendly", "Sauna", "Mountain View", "City View", "Sea View",
-];
-
-const PROPERTY_TYPES = ["Villa", "Apartment", "Cabin", "Cottage", "Studio", "House", "Penthouse", "Bungalow"];
+import { useAuth } from "@/components/context/AuthContext";
+import { createHostProperty, type PropertyDetail } from "@/services/propertyService";
+import {
+  AMENITY_OPTIONS,
+  PROPERTY_TYPE_OPTIONS,
+  MAX_PROPERTY_IMAGE_COUNT,
+  MAX_PROPERTY_IMAGE_SIZE_MB,
+  buildImageSizeError,
+  validatePropertyForm,
+  createPropertyFormData,
+  createEmptyPropertyForm,
+  isImageFileTooLarge,
+  type PropertyFormErrors,
+} from "@/lib/propertyForm";
 
 export default function AddPropertyPage() {
   const router = useRouter();
-  const [step, setStep] = useState(1);
-  const [submitted, setSubmitted] = useState(false);
-  const [form, setForm] = useState({
-    title: "", type: "Villa", address: "", city: "", country: "",
-    price: "", description: "", maxGuests: "2", bedrooms: "1", bathrooms: "1",
-    amenities: [] as string[],
-    images: [] as File[],
-  });
-  const [errors, setErrors] = useState<Record<string, string>>({});
+  const { user, isInitializing } = useAuth();
+  const hostId = user?.id;
 
-  const toggleAmenity = (a: string) => {
-    setForm(prev => ({
+  const [form, setForm] = useState(createEmptyPropertyForm());
+  const [coverImage, setCoverImage] = useState<File | null>(null);
+  const [detailImages, setDetailImages] = useState<File[]>([]);
+  const [errors, setErrors] = useState<PropertyFormErrors>({});
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [createdProperty, setCreatedProperty] = useState<PropertyDetail | null>(null);
+  const [generalError, setGeneralError] = useState<string | null>(null);
+  const [coverPreview, setCoverPreview] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!coverImage) {
+      setCoverPreview(null);
+      return;
+    }
+
+    const objectUrl = URL.createObjectURL(coverImage);
+    setCoverPreview(objectUrl);
+
+    return () => {
+      URL.revokeObjectURL(objectUrl);
+    };
+  }, [coverImage]);
+
+  function updateField(
+    key: keyof typeof form,
+    value: string | string[],
+  ) {
+    setForm((prev) => ({ ...prev, [key]: value }));
+    setErrors((prev) => ({ ...prev, [key]: undefined }));
+  }
+
+  function toggleAmenity(amenity: string) {
+    setForm((prev) => ({
       ...prev,
-      amenities: prev.amenities.includes(a)
-        ? prev.amenities.filter(x => x !== a)
-        : [...prev.amenities, a]
+      amenities: prev.amenities.includes(amenity)
+        ? prev.amenities.filter((item) => item !== amenity)
+        : [...prev.amenities, amenity],
     }));
-  };
+  }
 
-  const validateStep = (s: number) => {
-    const e: Record<string, string> = {};
-    if (s === 1) {
-      if (!form.title.trim()) e.title = "Title is required";
-      if (!form.address.trim()) e.address = "Address is required";
-      if (!form.city.trim()) e.city = "City is required";
-      if (!form.country.trim()) e.country = "Country is required";
+  function removeDetailImage(index: number) {
+    setDetailImages((prev) => prev.filter((_, itemIndex) => itemIndex !== index));
+  }
+
+  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (!hostId) {
+      setGeneralError("Host session is invalid. Please sign in again.");
+      return;
     }
-    if (s === 2) {
-      if (!form.price || isNaN(Number(form.price))) e.price = "Valid price is required";
-      if (!form.description.trim() || form.description.length < 50) e.description = "Description must be at least 50 characters";
+
+    const validateErrors = validatePropertyForm(form, {
+      requireCoverImage: true,
+      hasCoverImage: Boolean(coverImage),
+    });
+
+    if (Object.keys(validateErrors).length > 0) {
+      setErrors(validateErrors);
+      setGeneralError("Please review the property information before submitting.");
+      return;
     }
-    setErrors(e);
-    return Object.keys(e).length === 0;
-  };
 
-  const nextStep = () => {
-    if (validateStep(step)) setStep(s => Math.min(s + 1, 4));
-  };
+    try {
+      setIsSubmitting(true);
+      setGeneralError(null);
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    setSubmitted(true);
-  };
+      const formData = createPropertyFormData({
+        form,
+        hostId,
+        coverImage,
+        detailImages,
+      });
 
-  const steps = [
-    { n: 1, label: "Basic Info" },
-    { n: 2, label: "Details" },
-    { n: 3, label: "Amenities" },
-    { n: 4, label: "Photos" },
-  ];
+      const response = await createHostProperty(formData);
+      setCreatedProperty(response.data);
+      setErrors({});
+    } catch (error) {
+      setGeneralError(
+        error instanceof Error
+          ? error.message
+          : "Unable to create a new property. Please try again.",
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
 
-  if (submitted) {
+  if (createdProperty) {
     return (
       <div style={{ padding: "48px 28px", textAlign: "center" }}>
-        <div style={{ maxWidth: 480, margin: "0 auto" }}>
-          <div style={{ width: 80, height: 80, borderRadius: "50%", background: "#dcfce7", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 20px" }}>
+        <div style={{ maxWidth: 520, margin: "0 auto" }}>
+          <div
+            style={{
+              width: 80,
+              height: 80,
+              borderRadius: "50%",
+              background: "#dcfce7",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              margin: "0 auto 20px",
+            }}
+          >
             <CheckCircle size={40} color="#16a34a" />
           </div>
-          <h2 style={{ fontWeight: 800, color: "#1e293b", marginBottom: 10 }}>Property Submitted!</h2>
+          <h2 style={{ fontWeight: 800, color: "#1e293b", marginBottom: 10 }}>
+            Property created successfully
+          </h2>
           <p style={{ color: "#64748b", lineHeight: 1.7, marginBottom: 24 }}>
-            Your property <strong>"{form.title || "New Property"}"</strong> has been submitted for review.
-            Our team will approve it within 1–2 business days.
+            <strong>{createdProperty.title}</strong> has been submitted to the system
+            and is currently in <strong>{createdProperty.status}</strong> status.
           </p>
-          <div style={{ background: "#fef3c7", borderRadius: 10, padding: "14px 18px", marginBottom: 24, display: "flex", gap: 10, textAlign: "left" }}>
-            <span style={{ fontSize: "1.2rem" }}>⏳</span>
-            <div>
-              <div style={{ fontWeight: 700, color: "#92400e", fontSize: "0.9rem" }}>Status: Pending Review</div>
-              <div style={{ color: "#92400e", fontSize: "0.82rem", marginTop: 2 }}>You'll be notified once approved.</div>
+
+          <div
+            style={{
+              background: "#fef3c7",
+              borderRadius: 10,
+              padding: "14px 18px",
+              marginBottom: 24,
+              textAlign: "left",
+            }}
+          >
+            <div
+              style={{
+                fontWeight: 700,
+                color: "#92400e",
+                fontSize: "0.9rem",
+                marginBottom: 4,
+              }}
+            >
+              Current status: pending approval
+            </div>
+            <div style={{ color: "#92400e", fontSize: "0.82rem" }}>
+              You can review this property in the host dashboard or open the
+              public detail page after it has been approved by an admin.
             </div>
           </div>
-          <div style={{ display: "flex", gap: 10, justifyContent: "center" }}>
-            <button className="btn-primary-hs" onClick={() => router.push("/host/my-properties")} style={{ display: "flex", alignItems: "center", gap: 6 }}>
-              View My Properties <ArrowRight size={14} />
+
+          <div style={{ display: "flex", gap: 10, justifyContent: "center", flexWrap: "wrap" }}>
+            <button
+              className="btn-primary-hs"
+              onClick={() => router.push("/host/my-properties")}
+            >
+              Back to property list
             </button>
-            <button className="btn-outline-hs" onClick={() => { setSubmitted(false); setStep(1); setForm({ title: "", type: "Villa", address: "", city: "", country: "", price: "", description: "", maxGuests: "2", bedrooms: "1", bathrooms: "1", amenities: [], images: [] }); }}>
-              Add Another
+            <button
+              className="btn-outline-hs"
+              onClick={() => {
+                setCreatedProperty(null);
+                setForm(createEmptyPropertyForm());
+                setCoverImage(null);
+                setDetailImages([]);
+              }}
+            >
+              Create another property
             </button>
           </div>
         </div>
@@ -104,245 +195,495 @@ export default function AddPropertyPage() {
     );
   }
 
+  if (isInitializing || !user) {
+    return <PageState message="Checking host session..." />;
+  }
+
   return (
-    <div style={{ padding: "28px" }}>
-      <div style={{ marginBottom: 28 }}>
-        <h1 style={{ fontWeight: 800, color: "#1e293b", marginBottom: 4, fontSize: "1.5rem" }}>Add New Property</h1>
-        <p style={{ color: "#64748b", margin: 0 }}>Fill in the details to list your property</p>
+    <div style={{ padding: "28px", maxWidth: 1040, margin: "0 auto" }}>
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          gap: 16,
+          alignItems: "flex-start",
+          marginBottom: 24,
+          flexWrap: "wrap",
+        }}
+      >
+        <div>
+          <h1
+            style={{
+              fontWeight: 800,
+              color: "#1e293b",
+              marginBottom: 4,
+              fontSize: "1.5rem",
+            }}
+          >
+            Add New Property
+          </h1>
+          <p style={{ color: "#64748b", margin: 0 }}>
+            Complete all details before submitting your property to the platform.
+          </p>
+        </div>
+        <Link href="/host/my-properties" className="btn-outline-hs">
+          Back to list
+        </Link>
       </div>
 
-      {/* Stepper */}
-      <div style={{ display: "flex", alignItems: "center", marginBottom: 32, overflowX: "auto", padding: "4px 0" }}>
-        {steps.map((s, i) => (
-          <div key={s.n} style={{ display: "flex", alignItems: "center" }}>
-            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", cursor: "pointer" }}
-              onClick={() => step > s.n && setStep(s.n)}>
-              <div style={{
-                width: 40, height: 40, borderRadius: "50%",
-                background: step > s.n ? "#16a34a" : step === s.n ? "#2563EB" : "#e2e8f0",
-                color: step >= s.n ? "#fff" : "#94a3b8",
-                display: "flex", alignItems: "center", justifyContent: "center",
-                fontWeight: 700, fontSize: "0.9rem", transition: "all 0.2s"
-              }}>
-                {step > s.n ? <CheckCircle size={18} /> : s.n}
-              </div>
-              <div style={{ fontSize: "0.75rem", fontWeight: 600, color: step === s.n ? "#2563EB" : "#94a3b8", marginTop: 5, whiteSpace: "nowrap" }}>
-                {s.label}
-              </div>
-            </div>
-            {i < steps.length - 1 && (
-              <div style={{ height: 2, flex: 1, minWidth: 40, background: step > s.n ? "#16a34a" : "#e2e8f0", margin: "0 8px", transition: "all 0.2s", marginBottom: 18 }} />
-            )}
-          </div>
-        ))}
-      </div>
+      {generalError && (
+        <div
+          style={{
+            marginBottom: 18,
+            padding: "12px 16px",
+            borderRadius: 10,
+            background: "#fee2e2",
+            color: "#b91c1c",
+            fontWeight: 600,
+          }}
+        >
+          {generalError}
+        </div>
+      )}
 
-      <div style={{ maxWidth: 720 }}>
-        <div className="hs-card" style={{ padding: "28px 32px" }}>
-
-          {/* Step 1: Basic Info */}
-          {step === 1 && (
-            <div>
-              <h3 style={{ fontWeight: 700, color: "#1e293b", marginBottom: 20, fontSize: "1.1rem", display: "flex", alignItems: "center", gap: 8 }}>
-                <FileText size={18} color="#2563EB" /> Basic Information
-              </h3>
-              <div className="row g-3">
-                <div className="col-12">
-                  <label className="hs-form-label">Property Title *</label>
-                  <input className="hs-form-control" placeholder="e.g. Cozy Beachside Villa with Pool"
-                    value={form.title} onChange={e => setForm({ ...form, title: e.target.value })}
-                    style={{ borderColor: errors.title ? "#dc2626" : undefined }} />
-                  {errors.title && <div style={{ color: "#dc2626", fontSize: "0.78rem", marginTop: 4 }}>{errors.title}</div>}
-                </div>
-                <div className="col-md-6">
-                  <label className="hs-form-label">Property Type *</label>
-                  <select className="hs-form-control" value={form.type} onChange={e => setForm({ ...form, type: e.target.value })}>
-                    {PROPERTY_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
-                  </select>
-                </div>
-                <div className="col-md-6">
-                  <label className="hs-form-label">Price Per Night ($) *</label>
-                  <div style={{ position: "relative" }}>
-                    <DollarSign size={15} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "#94a3b8" }} />
-                    <input className="hs-form-control" placeholder="0" type="number" min="1"
-                      style={{ paddingLeft: 34, borderColor: errors.price ? "#dc2626" : undefined }}
-                      value={form.price} onChange={e => setForm({ ...form, price: e.target.value })} />
-                  </div>
-                </div>
-                <div className="col-12">
-                  <label className="hs-form-label">Street Address *</label>
-                  <div style={{ position: "relative" }}>
-                    <MapPin size={15} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "#94a3b8" }} />
-                    <input className="hs-form-control" placeholder="123 Beach Road"
-                      style={{ paddingLeft: 34, borderColor: errors.address ? "#dc2626" : undefined }}
-                      value={form.address} onChange={e => setForm({ ...form, address: e.target.value })} />
-                  </div>
-                  {errors.address && <div style={{ color: "#dc2626", fontSize: "0.78rem", marginTop: 4 }}>{errors.address}</div>}
-                </div>
-                <div className="col-md-6">
-                  <label className="hs-form-label">City *</label>
-                  <input className="hs-form-control" placeholder="Bali"
-                    style={{ borderColor: errors.city ? "#dc2626" : undefined }}
-                    value={form.city} onChange={e => setForm({ ...form, city: e.target.value })} />
-                  {errors.city && <div style={{ color: "#dc2626", fontSize: "0.78rem", marginTop: 4 }}>{errors.city}</div>}
-                </div>
-                <div className="col-md-6">
-                  <label className="hs-form-label">Country *</label>
-                  <input className="hs-form-control" placeholder="Indonesia"
-                    style={{ borderColor: errors.country ? "#dc2626" : undefined }}
-                    value={form.country} onChange={e => setForm({ ...form, country: e.target.value })} />
-                  {errors.country && <div style={{ color: "#dc2626", fontSize: "0.78rem", marginTop: 4 }}>{errors.country}</div>}
-                </div>
+      <form onSubmit={handleSubmit} className="row g-4">
+        <div className="col-lg-8">
+          <div className="hs-card" style={{ padding: "24px", marginBottom: 20 }}>
+            <h3 style={{ fontWeight: 700, color: "#1e293b", marginBottom: 18 }}>
+              Basic information
+            </h3>
+            <div className="row g-3">
+              <div className="col-12">
+                <label className="hs-form-label">Property title</label>
+                <input
+                  className="hs-form-control"
+                  value={form.title}
+                  onChange={(event) => updateField("title", event.target.value)}
+                  placeholder="Example: Sunset Villa Da Nang"
+                />
+                {errors.title && <ErrorText message={errors.title} />}
               </div>
-            </div>
-          )}
 
-          {/* Step 2: Details */}
-          {step === 2 && (
-            <div>
-              <h3 style={{ fontWeight: 700, color: "#1e293b", marginBottom: 20, fontSize: "1.1rem", display: "flex", alignItems: "center", gap: 8 }}>
-                <Users size={18} color="#2563EB" /> Property Details
-              </h3>
-              <div className="row g-3">
-                <div className="col-md-4">
-                  <label className="hs-form-label">Max Guests</label>
-                  <select className="hs-form-control" value={form.maxGuests} onChange={e => setForm({ ...form, maxGuests: e.target.value })}>
-                    {[1,2,3,4,5,6,7,8,10,12].map(n => <option key={n} value={n}>{n} Guest{n>1?"s":""}</option>)}
-                  </select>
-                </div>
-                <div className="col-md-4">
-                  <label className="hs-form-label">Bedrooms</label>
-                  <select className="hs-form-control" value={form.bedrooms} onChange={e => setForm({ ...form, bedrooms: e.target.value })}>
-                    {[1,2,3,4,5,6].map(n => <option key={n} value={n}>{n}</option>)}
-                  </select>
-                </div>
-                <div className="col-md-4">
-                  <label className="hs-form-label">Bathrooms</label>
-                  <select className="hs-form-control" value={form.bathrooms} onChange={e => setForm({ ...form, bathrooms: e.target.value })}>
-                    {[1,2,3,4,5].map(n => <option key={n} value={n}>{n}</option>)}
-                  </select>
-                </div>
-                <div className="col-12">
-                  <label className="hs-form-label">Description *</label>
-                  <textarea
-                    className="hs-form-control"
-                    rows={6}
-                    placeholder="Describe your property in detail. Include the style, unique features, nearby attractions, and what makes it special. (Minimum 50 characters)"
-                    style={{ resize: "vertical", borderColor: errors.description ? "#dc2626" : undefined }}
-                    value={form.description}
-                    onChange={e => setForm({ ...form, description: e.target.value })}
+              <div className="col-md-6">
+                <label className="hs-form-label">Property type</label>
+                <select
+                  className="hs-form-control"
+                  value={form.type}
+                  onChange={(event) => updateField("type", event.target.value)}
+                >
+                  {PROPERTY_TYPE_OPTIONS.map((type) => (
+                    <option key={type} value={type}>
+                      {type}
+                    </option>
+                  ))}
+                </select>
+                {errors.type && <ErrorText message={errors.type} />}
+              </div>
+
+              <div className="col-md-6">
+                <label className="hs-form-label">Price per night</label>
+                <input
+                  type="number"
+                  min="1"
+                  className="hs-form-control"
+                  value={form.price}
+                  onChange={(event) => updateField("price", event.target.value)}
+                  placeholder="200"
+                />
+                {errors.price && <ErrorText message={errors.price} />}
+              </div>
+
+              <div className="col-12">
+                <label className="hs-form-label">Address</label>
+                <div style={{ position: "relative" }}>
+                  <MapPin
+                    size={15}
+                    style={{
+                      position: "absolute",
+                      left: 12,
+                      top: "50%",
+                      transform: "translateY(-50%)",
+                      color: "#94a3b8",
+                    }}
                   />
-                  {errors.description && <div style={{ color: "#dc2626", fontSize: "0.78rem", marginTop: 4 }}>{errors.description}</div>}
-                  <div style={{ textAlign: "right", fontSize: "0.75rem", color: "#94a3b8", marginTop: 4 }}>
-                    {form.description.length} characters
-                  </div>
+                  <input
+                    className="hs-form-control"
+                    style={{ paddingLeft: 34 }}
+                    value={form.address}
+                    onChange={(event) => updateField("address", event.target.value)}
+                    placeholder="123 Beach Road"
+                  />
                 </div>
+                {errors.address && <ErrorText message={errors.address} />}
+              </div>
+
+              <div className="col-md-6">
+                <label className="hs-form-label">City</label>
+                <input
+                  className="hs-form-control"
+                  value={form.city}
+                  onChange={(event) => updateField("city", event.target.value)}
+                  placeholder="Da Nang"
+                />
+                {errors.city && <ErrorText message={errors.city} />}
+              </div>
+
+              <div className="col-md-6">
+                <label className="hs-form-label">Country</label>
+                <input
+                  className="hs-form-control"
+                  value={form.country}
+                  onChange={(event) => updateField("country", event.target.value)}
+                  placeholder="Vietnam"
+                />
+                {errors.country && <ErrorText message={errors.country} />}
               </div>
             </div>
-          )}
+          </div>
 
-          {/* Step 3: Amenities */}
-          {step === 3 && (
-            <div>
-              <h3 style={{ fontWeight: 700, color: "#1e293b", marginBottom: 8, fontSize: "1.1rem", display: "flex", alignItems: "center", gap: 8 }}>
-                <CheckSquare size={18} color="#2563EB" /> Amenities
-              </h3>
-              <p style={{ color: "#64748b", fontSize: "0.87rem", marginBottom: 20 }}>
-                Select all amenities your property offers ({form.amenities.length} selected)
-              </p>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: 10 }}>
-                {AMENITIES.map(a => {
-                  const selected = form.amenities.includes(a);
-                  return (
-                    <label key={a} style={{
-                      display: "flex", alignItems: "center", gap: 8, padding: "10px 14px",
-                      border: `1.5px solid ${selected ? "#2563EB" : "#e2e8f0"}`,
-                      borderRadius: 8, cursor: "pointer", fontSize: "0.85rem",
+          <div className="hs-card" style={{ padding: "24px", marginBottom: 20 }}>
+            <h3 style={{ fontWeight: 700, color: "#1e293b", marginBottom: 18 }}>
+              Capacity details
+            </h3>
+            <div className="row g-3">
+              <div className="col-md-4">
+                <label className="hs-form-label">Maximum guests</label>
+                <div style={{ position: "relative" }}>
+                  <Users
+                    size={15}
+                    style={{
+                      position: "absolute",
+                      left: 12,
+                      top: "50%",
+                      transform: "translateY(-50%)",
+                      color: "#94a3b8",
+                    }}
+                  />
+                  <input
+                    type="number"
+                    min="1"
+                    className="hs-form-control"
+                    style={{ paddingLeft: 34 }}
+                    value={form.maxGuests}
+                    onChange={(event) => updateField("maxGuests", event.target.value)}
+                  />
+                </div>
+                {errors.maxGuests && <ErrorText message={errors.maxGuests} />}
+              </div>
+
+              <div className="col-md-4">
+                <label className="hs-form-label">Bedrooms</label>
+                <input
+                  type="number"
+                  min="0"
+                  className="hs-form-control"
+                  value={form.bedrooms}
+                  onChange={(event) => updateField("bedrooms", event.target.value)}
+                />
+                {errors.bedrooms && <ErrorText message={errors.bedrooms} />}
+              </div>
+
+              <div className="col-md-4">
+                <label className="hs-form-label">Bathrooms</label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.5"
+                  className="hs-form-control"
+                  value={form.bathrooms}
+                  onChange={(event) => updateField("bathrooms", event.target.value)}
+                />
+                {errors.bathrooms && <ErrorText message={errors.bathrooms} />}
+              </div>
+
+              <div className="col-12">
+                <label className="hs-form-label">Description</label>
+                <textarea
+                  className="hs-form-control"
+                  rows={6}
+                  value={form.description}
+                  onChange={(event) => updateField("description", event.target.value)}
+                  placeholder="Describe the style, location, and standout amenities..."
+                  style={{ resize: "vertical" }}
+                />
+                {errors.description && <ErrorText message={errors.description} />}
+              </div>
+            </div>
+          </div>
+
+          <div className="hs-card" style={{ padding: "24px", marginBottom: 20 }}>
+            <h3 style={{ fontWeight: 700, color: "#1e293b", marginBottom: 10 }}>
+              Amenities
+            </h3>
+            <p style={{ color: "#64748b", fontSize: "0.88rem", marginBottom: 16 }}>
+              Select the amenities available at this property.
+            </p>
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))",
+                gap: 10,
+              }}
+            >
+              {AMENITY_OPTIONS.map((amenity) => {
+                const selected = form.amenities.includes(amenity);
+
+                return (
+                  <label
+                    key={amenity}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 8,
+                      padding: "10px 14px",
+                      border: `1.5px solid ${selected ? "#2563eb" : "#e2e8f0"}`,
+                      borderRadius: 8,
+                      cursor: "pointer",
                       background: selected ? "#eff6ff" : "#fff",
-                      color: selected ? "#2563EB" : "#475569",
+                      color: selected ? "#2563eb" : "#475569",
                       fontWeight: selected ? 600 : 400,
-                      transition: "all 0.15s"
-                    }}>
-                      <input type="checkbox" checked={selected} onChange={() => toggleAmenity(a)}
-                        style={{ accentColor: "#2563EB" }} />
-                      {a}
-                    </label>
-                  );
-                })}
-              </div>
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selected}
+                      onChange={() => toggleAmenity(amenity)}
+                      style={{ accentColor: "#2563eb" }}
+                    />
+                    {amenity}
+                  </label>
+                );
+              })}
             </div>
-          )}
-
-          {/* Step 4: Photos */}
-          {step === 4 && (
-            <div>
-              <h3 style={{ fontWeight: 700, color: "#1e293b", marginBottom: 8, fontSize: "1.1rem", display: "flex", alignItems: "center", gap: 8 }}>
-                <Image size={18} color="#2563EB" /> Upload Photos
-              </h3>
-              <p style={{ color: "#64748b", fontSize: "0.87rem", marginBottom: 20 }}>
-                Upload high-quality photos. The first image will be the main cover photo. (Max 10 photos)
-              </p>
-
-              <label style={{
-                display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
-                border: "2px dashed #bfdbfe", borderRadius: 12, padding: "48px 24px",
-                cursor: "pointer", background: "#f8fafc", transition: "all 0.15s",
-                marginBottom: 20
-              }}>
-                <div style={{ width: 60, height: 60, borderRadius: "50%", background: "#eff6ff", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 14 }}>
-                  <Upload size={24} color="#2563EB" />
-                </div>
-                <div style={{ fontWeight: 700, color: "#1e293b", marginBottom: 4 }}>
-                  Click to upload photos
-                </div>
-                <div style={{ color: "#94a3b8", fontSize: "0.82rem" }}>
-                  PNG, JPG, WEBP up to 10MB each
-                </div>
-                <input type="file" multiple accept="image/*" style={{ display: "none" }}
-                  onChange={e => setForm({ ...form, images: Array.from(e.target.files || []) })} />
-              </label>
-
-              {form.images.length > 0 && (
-                <div>
-                  <div style={{ fontWeight: 600, color: "#1e293b", marginBottom: 10, fontSize: "0.88rem" }}>
-                    {form.images.length} photo{form.images.length > 1 ? "s" : ""} selected
-                  </div>
-                  <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-                    {Array.from(form.images).map((file, i) => (
-                      <div key={i} style={{ padding: "6px 12px", background: "#eff6ff", borderRadius: 6, fontSize: "0.78rem", color: "#2563EB", fontWeight: 600, display: "flex", alignItems: "center", gap: 4 }}>
-                        <Image size={12} /> {file.name}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              <div style={{ background: "#fef3c7", borderRadius: 10, padding: "12px 16px", marginTop: 16, fontSize: "0.82rem", color: "#92400e", display: "flex", gap: 8 }}>
-                <span>📸</span>
-                <div>Properties with 5+ professional photos receive <strong>3x more bookings</strong>. Good lighting and wide-angle shots work best.</div>
-              </div>
-            </div>
-          )}
-
-          {/* Navigation Buttons */}
-          <div style={{ display: "flex", justifyContent: "space-between", marginTop: 28, paddingTop: 20, borderTop: "1px solid #e2e8f0" }}>
-            {step > 1 ? (
-              <button onClick={() => setStep(s => s - 1)} className="btn-outline-hs" style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                <ArrowLeft size={14} /> Previous
-              </button>
-            ) : <div />}
-
-            {step < 4 ? (
-              <button onClick={nextStep} className="btn-primary-hs" style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                Next Step <ArrowRight size={14} />
-              </button>
-            ) : (
-              <button onClick={handleSubmit} className="btn-primary-hs" style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                <CheckCircle size={16} /> Submit Property
-              </button>
-            )}
           </div>
         </div>
+
+        <div className="col-lg-4">
+          <div className="hs-card" style={{ padding: "24px", marginBottom: 20 }}>
+            <h3 style={{ fontWeight: 700, color: "#1e293b", marginBottom: 14 }}>
+              Cover image
+            </h3>
+            <label
+              style={{
+                display: "block",
+                border: "2px dashed #bfdbfe",
+                borderRadius: 12,
+                padding: "18px",
+                background: "#f8fafc",
+                cursor: "pointer",
+                textAlign: "center",
+              }}
+            >
+              <FileImage size={26} color="#2563eb" style={{ marginBottom: 10 }} />
+              <div style={{ fontWeight: 700, color: "#1e293b", marginBottom: 4 }}>
+                Upload cover image
+              </div>
+              <div style={{ color: "#94a3b8", fontSize: "0.82rem" }}>
+                Recommended size: 1600 x 900 or larger, up to {MAX_PROPERTY_IMAGE_SIZE_MB} MB
+              </div>
+              <input
+                type="file"
+                accept="image/*"
+                style={{ display: "none" }}
+                onChange={(event) => {
+                  const file = event.target.files?.[0] || null;
+
+                  if (file && isImageFileTooLarge(file)) {
+                    setCoverImage(null);
+                    setErrors((prev) => ({
+                      ...prev,
+                      coverImage: `Cover image must be ${MAX_PROPERTY_IMAGE_SIZE_MB} MB or smaller.`,
+                    }));
+                    setGeneralError(buildImageSizeError(file));
+                    return;
+                  }
+
+                  setCoverImage(file);
+                  setGeneralError(null);
+                  setErrors((prev) => ({ ...prev, coverImage: undefined }));
+                }}
+              />
+            </label>
+            {errors.coverImage && <ErrorText message={errors.coverImage} />}
+
+            {coverPreview && (
+              <div style={{ marginTop: 14 }}>
+                <img
+                  src={coverPreview}
+                  alt="Cover preview"
+                  style={{
+                    width: "100%",
+                    height: 200,
+                    objectFit: "cover",
+                    borderRadius: 10,
+                  }}
+                />
+                {coverImage && (
+                  <div style={{ marginTop: 8, fontSize: "0.82rem", color: "#64748b" }}>
+                    {coverImage.name}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          <div className="hs-card" style={{ padding: "24px", marginBottom: 20 }}>
+            <h3 style={{ fontWeight: 700, color: "#1e293b", marginBottom: 14 }}>
+              Detail images
+            </h3>
+
+            <label
+              style={{
+                display: "block",
+                border: "2px dashed #cbd5e1",
+                borderRadius: 12,
+                padding: "18px",
+                background: "#fff",
+                cursor: "pointer",
+                textAlign: "center",
+              }}
+            >
+              <ImagePlus size={26} color="#2563eb" style={{ marginBottom: 10 }} />
+              <div style={{ fontWeight: 700, color: "#1e293b", marginBottom: 4 }}>
+                Add detail images
+              </div>
+              <div style={{ color: "#94a3b8", fontSize: "0.82rem" }}>
+                Upload up to {MAX_PROPERTY_IMAGE_COUNT} images, each up to {MAX_PROPERTY_IMAGE_SIZE_MB} MB
+              </div>
+              <input
+                type="file"
+                accept="image/*"
+                multiple
+                style={{ display: "none" }}
+                onChange={(event) => {
+                  const files = Array.from(event.target.files || []);
+                  const oversizedFile = files.find(isImageFileTooLarge);
+                  if (oversizedFile) {
+                    setGeneralError(buildImageSizeError(oversizedFile));
+                    return;
+                  }
+
+                  setDetailImages((prev) => {
+                    const nextFiles = [...prev, ...files];
+
+                    if (nextFiles.length > MAX_PROPERTY_IMAGE_COUNT) {
+                      setGeneralError(
+                        `You can upload up to ${MAX_PROPERTY_IMAGE_COUNT} detail images.`,
+                      );
+                      return prev;
+                    }
+
+                    setGeneralError(null);
+                    return nextFiles;
+                  });
+                }}
+              />
+            </label>
+
+            {detailImages.length > 0 && (
+              <div style={{ marginTop: 14, display: "flex", flexDirection: "column", gap: 8 }}>
+                {detailImages.map((file, index) => (
+                  <div
+                    key={`${file.name}-${index}`}
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      padding: "10px 12px",
+                      borderRadius: 8,
+                      background: "#f8fafc",
+                    }}
+                  >
+                    <div style={{ minWidth: 0 }}>
+                      <div
+                        style={{
+                          fontWeight: 600,
+                          color: "#1e293b",
+                          fontSize: "0.84rem",
+                          whiteSpace: "nowrap",
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                        }}
+                      >
+                        {file.name}
+                      </div>
+                      <div style={{ color: "#94a3b8", fontSize: "0.75rem" }}>
+                        {(file.size / 1024 / 1024).toFixed(2)} MB
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => removeDetailImage(index)}
+                      style={{
+                        border: "none",
+                        background: "transparent",
+                        color: "#dc2626",
+                        cursor: "pointer",
+                      }}
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="hs-card" style={{ padding: "24px" }}>
+            <h3 style={{ fontWeight: 700, color: "#1e293b", marginBottom: 10 }}>
+              Actions
+            </h3>
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              <button
+                type="submit"
+                className="btn-primary-hs"
+                disabled={isSubmitting}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: 6,
+                  opacity: isSubmitting ? 0.7 : 1,
+                }}
+              >
+                <Save size={16} />
+                {isSubmitting ? "Submitting..." : "Create property"}
+              </button>
+            </div>
+          </div>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+function ErrorText({ message }: { message: string }) {
+  return (
+    <div style={{ color: "#dc2626", fontSize: "0.78rem", marginTop: 4 }}>
+      {message}
+    </div>
+  );
+}
+
+function PageState({ message }: { message: string }) {
+  return (
+    <div style={{ padding: "48px 28px", textAlign: "center" }}>
+      <div style={{ maxWidth: 420, margin: "0 auto" }}>
+        <div
+          style={{
+            width: 80,
+            height: 80,
+            borderRadius: "50%",
+            background: "#eff6ff",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            margin: "0 auto 16px",
+          }}
+        >
+          <CheckCircle size={36} color="#2563eb" />
+        </div>
+        <p style={{ color: "#475569", marginBottom: 18 }}>{message}</p>
       </div>
     </div>
   );

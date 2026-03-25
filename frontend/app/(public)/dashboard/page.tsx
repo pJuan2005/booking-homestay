@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -22,7 +22,7 @@ function isCheckoutPast(checkOutDate: string): boolean {
 }
 
 export default function UserDashboard() {
-  const { user, logout } = useAuth();
+  const { user, logout, isInitializing } = useAuth();
   const router = useRouter();
   // const { hasReview } = useReviews(); // Placeholder
   const hasReview = (id: number) => false; // Dummy implementation
@@ -53,8 +53,8 @@ export default function UserDashboard() {
     setCancelConfirm(null);
   };
 
-  const handleLogout = () => {
-    logout();
+  const handleLogout = async () => {
+    await logout();
     router.push("/");
   };
 
@@ -68,6 +68,20 @@ export default function UserDashboard() {
   const displayEmail = user?.email || "alice@example.com";
   const initials = getUserInitials(displayName);
   const memberSince = user?.joined ? new Date(user.joined).toLocaleDateString("en-US", { month: "long", year: "numeric" }) : "January 2024";
+
+  useEffect(() => {
+    if (!isInitializing && (!user || user.role !== "Guest")) {
+      router.replace("/auth/login");
+    }
+  }, [isInitializing, router, user]);
+
+  if (isInitializing || !user || user.role !== "Guest") {
+    return (
+      <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", color: "#64748b" }}>
+        Checking user session...
+      </div>
+    );
+  }
 
   return (
     <div style={{ background: "#f8fafc", minHeight: "100vh", padding: "32px 0" }}>

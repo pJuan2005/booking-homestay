@@ -10,6 +10,31 @@ import {
 import { DollarSign, TrendingUp, CalendarDays, Users, Download, Trophy } from "lucide-react";
 import { monthlyRevenue, topHosts, bookings, properties } from "@/lib/mockData";
 
+function formatCurrency(value: number | string | undefined) {
+  const amount = Number(value || 0);
+  return `$${amount.toLocaleString()}`;
+}
+
+function formatCompactCurrency(value: number | string | undefined) {
+  const amount = Number(value || 0);
+  return `$${(amount / 1000).toFixed(0)}k`;
+}
+
+function formatReportTooltip(
+  value: number | string | undefined,
+  name: string | number | undefined,
+) {
+  const label = String(name || "");
+  return [
+    label === "revenue" ? formatCurrency(value) : Number(value || 0),
+    label === "revenue" ? "Revenue" : "Bookings",
+  ] as const;
+}
+
+function formatLegendLabel(value: string | number | undefined) {
+  return String(value) === "revenue" ? "Revenue" : "Bookings";
+}
+
 const COLORS = ["#2563EB", "#16a34a", "#d97706", "#7c3aed", "#dc2626"];
 
 const propertyTypeData = [
@@ -92,11 +117,11 @@ export default function AdminReportsPage() {
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
                   <XAxis dataKey="month" tick={{ fontSize: 12, fill: "#94a3b8" }} axisLine={false} tickLine={false} />
-                  <YAxis yAxisId="left" tick={{ fontSize: 11, fill: "#94a3b8" }} axisLine={false} tickLine={false} tickFormatter={v => `$${(v/1000).toFixed(0)}k`} />
+                  <YAxis yAxisId="left" tick={{ fontSize: 11, fill: "#94a3b8" }} axisLine={false} tickLine={false} tickFormatter={formatCompactCurrency} />
                   <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 11, fill: "#94a3b8" }} axisLine={false} tickLine={false} />
                   <Tooltip contentStyle={{ borderRadius: 8, border: "1px solid #e2e8f0", boxShadow: "0 4px 12px rgba(0,0,0,0.08)" }}
-                    formatter={(value: number, name: string) => [name === "revenue" ? `$${value.toLocaleString()}` : value, name === "revenue" ? "Revenue" : "Bookings"]} />
-                  <Legend formatter={(v) => v === "revenue" ? "Revenue" : "Bookings"} />
+                    formatter={(value, name) => formatReportTooltip(value as number | string | undefined, name as string | number | undefined)} />
+                  <Legend formatter={(value) => formatLegendLabel(value as string | number | undefined)} />
                   <Area yAxisId="left" type="monotone" dataKey="revenue" stroke="#2563EB" strokeWidth={2.5} fill="url(#revGrad2)" />
                   <Area yAxisId="right" type="monotone" dataKey="bookings" stroke="#16a34a" strokeWidth={2} fill="url(#bookGrad)" />
                 </AreaChart>

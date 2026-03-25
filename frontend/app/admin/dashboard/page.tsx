@@ -11,6 +11,16 @@ import {
 import { users, properties, bookings, monthlyRevenue } from "@/lib/mockData";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 
+function formatCurrency(value: number | string | undefined) {
+  const amount = Number(value || 0);
+  return `$${amount.toLocaleString()}`;
+}
+
+function formatCompactCurrency(value: number | string | undefined) {
+  const amount = Number(value || 0);
+  return `$${(amount / 1000).toFixed(0)}k`;
+}
+
 export default function AdminDashboardPage() {
   const totalRevenue = bookings.filter(b => b.status === "Confirmed").reduce((s, b) => s + b.totalPrice, 0);
 
@@ -78,8 +88,8 @@ export default function AdminDashboardPage() {
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
                   <XAxis dataKey="month" tick={{ fontSize: 12, fill: "#94a3b8" }} axisLine={false} tickLine={false} />
-                  <YAxis tick={{ fontSize: 12, fill: "#94a3b8" }} axisLine={false} tickLine={false} tickFormatter={v => `$${(v/1000).toFixed(0)}k`} />
-                  <Tooltip formatter={(v: number) => [`$${v.toLocaleString()}`, "Revenue"]} contentStyle={{ borderRadius: 8, border: "1px solid #e2e8f0", boxShadow: "0 4px 12px rgba(0,0,0,0.08)" }} />
+                  <YAxis tick={{ fontSize: 12, fill: "#94a3b8" }} axisLine={false} tickLine={false} tickFormatter={formatCompactCurrency} />
+                  <Tooltip formatter={(value) => [formatCurrency(value as number | string | undefined), "Revenue"]} contentStyle={{ borderRadius: 8, border: "1px solid #e2e8f0", boxShadow: "0 4px 12px rgba(0,0,0,0.08)" }} />
                   <Area type="monotone" dataKey="revenue" stroke="#2563EB" strokeWidth={2.5} fill="url(#revGrad)" />
                 </AreaChart>
               </ResponsiveContainer>

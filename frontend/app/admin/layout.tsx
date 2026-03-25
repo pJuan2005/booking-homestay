@@ -4,7 +4,7 @@
 // Admin panel — dark sidebar layout
 // ============================================================
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
@@ -12,6 +12,7 @@ import {
   CalendarDays, BarChart2, LogOut, Home, Menu, Bell,
   Shield, ChevronRight, ExternalLink,
 } from "lucide-react";
+import { useAuth } from "@/components/context/AuthContext";
 
 const navItems = [
   { icon: LayoutDashboard, label: "Dashboard",          path: "/admin/dashboard" },
@@ -24,17 +25,32 @@ const navItems = [
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const router   = useRouter();
+  const router = useRouter();
+  const { user, logout, isInitializing } = useAuth();
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
-  const [notifOpen,          setNotifOpen]          = useState(false);
+  const [notifOpen, setNotifOpen] = useState(false);
 
   const isActive    = (path: string) => pathname === path || pathname.startsWith(path);
   const currentPage = navItems.find((n) => isActive(n.path))?.label ?? "Dashboard";
 
-  const handleLogout = () => {
-    localStorage.removeItem("hs_user"); localStorage.removeItem("hs_role");
-    router.push("/");
-  };
+  useEffect(() => {
+    if (!isInitializing && (!user || user.role !== "Admin")) {
+      router.replace("/auth/login");
+    }
+  }, [isInitializing, router, user]);
+
+  async function handleLogout() {
+    await logout();
+    router.push("/auth/login");
+  }
+
+  if (isInitializing || !user || user.role !== "Admin") {
+    return (
+      <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", color: "#64748b" }}>
+        Checking admin access...
+      </div>
+    );
+  }
 
   const SidebarContent = () => (
     <>
@@ -50,8 +66,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             <Shield size={16} color="#fff" />
           </div>
           <div>
-            <div style={{ fontSize: "0.83rem", fontWeight: 700, color: "#e2e8f0" }}>Admin User</div>
-            <div style={{ fontSize: "0.72rem", color: "#64748b" }}>Super Administrator</div>
+            <div style={{ fontSize: "0.83rem", fontWeight: 700, color: "#e2e8f0" }}>{user.name}</div>
+            <div style={{ fontSize: "0.72rem", color: "#64748b" }}>{user.email}</div>
           </div>
         </div>
       </div>
