@@ -6,18 +6,42 @@ export interface Destination {
   image: string;
 }
 
-const IMG_BALI =
-  "https://images.unsplash.com/photo-1537996194471-e657df975ab4?w=800&q=80";
-const IMG_PARIS =
-  "https://images.unsplash.com/photo-1502602898657-3e91760cbb34?w=800&q=80";
-const IMG_TOKYO =
-  "https://images.unsplash.com/photo-1540959733332-eab4deabeeaf?w=800&q=80";
-const IMG_NEW_YORK =
-  "https://images.unsplash.com/photo-1496871328941-181939ec79ca?w=800&q=80";
+const IMG_DA_NANG =
+  "https://images.unsplash.com/photo-1528127269322-539801943592?auto=format&fit=crop&w=900&q=80";
+const IMG_HA_NOI =
+  "https://images.unsplash.com/photo-1559592413-7cec4d0cae2b?auto=format&fit=crop&w=900&q=80";
+const IMG_HO_CHI_MINH_CITY =
+  "https://images.unsplash.com/photo-1583417319070-4a69db38a482?auto=format&fit=crop&w=900&q=80";
+const IMG_DA_LAT =
+  "https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=900&q=80";
 
 export const destinations: Destination[] = [
-  { id: 1, name: "Bali", country: "Indonesia", properties: 128, image: IMG_BALI },
-  { id: 2, name: "Paris", country: "France", properties: 94, image: IMG_PARIS },
-  { id: 3, name: "Tokyo", country: "Japan", properties: 76, image: IMG_TOKYO },
-  { id: 4, name: "New York", country: "USA", properties: 215, image: IMG_NEW_YORK },
+  {
+    id: 1,
+    name: "Da Nang",
+    country: "Vietnam",
+    properties: 2,
+    image: IMG_DA_NANG,
+  },
+  {
+    id: 2,
+    name: "Ha Noi",
+    country: "Vietnam",
+    properties: 1,
+    image: IMG_HA_NOI,
+  },
+  {
+    id: 3,
+    name: "Ho Chi Minh City",
+    country: "Vietnam",
+    properties: 1,
+    image: IMG_HO_CHI_MINH_CITY,
+  },
+  {
+    id: 4,
+    name: "Da Lat",
+    country: "Vietnam",
+    properties: 1,
+    image: IMG_DA_LAT,
+  },
 ];

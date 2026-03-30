@@ -19,7 +19,6 @@ import {
 import {
   CalendarDays,
   DollarSign,
-  Download,
   TrendingUp,
   Trophy,
   Users,
@@ -114,19 +113,67 @@ export default function AdminReportsPage() {
     pendingBookings: 0,
     cancelledBookings: 0,
     totalRevenue: 0,
+    grossRevenue: 0,
+    platformRevenue: 0,
+    hostPayoutTotal: 0,
+    platformCommissionRate: 0.1,
   };
   const monthlyPerformance = reports?.monthlyPerformance || [];
   const bookingStatus = reports?.bookingStatus || [];
   const propertyTypes = reports?.propertyTypes || [];
   const topHosts = reports?.topHosts || [];
 
+  const bookingStatusTotals = useMemo(() => {
+    return bookingStatus.reduce<Record<string, number>>((accumulator, item) => {
+      accumulator[item.name] = Number(item.value || 0);
+      return accumulator;
+    }, {});
+  }, [bookingStatus]);
+
+  const totalRevenueResolved =
+    summary.grossRevenue > 0
+      ? summary.grossRevenue
+      : summary.totalRevenue > 0
+      ? summary.totalRevenue
+      : monthlyPerformance.reduce((sum, point) => sum + Number(point.revenue || 0), 0);
+  const platformRevenueResolved =
+    summary.platformRevenue > 0
+      ? summary.platformRevenue
+      : Number((totalRevenueResolved * (summary.platformCommissionRate || 0.1)).toFixed(2));
+  const hostPayoutResolved =
+    summary.hostPayoutTotal > 0
+      ? summary.hostPayoutTotal
+      : Number((totalRevenueResolved - platformRevenueResolved).toFixed(2));
+  const totalBookingsResolved =
+    summary.totalBookings > 0
+      ? summary.totalBookings
+      : bookingStatus.reduce((sum, item) => sum + Number(item.value || 0), 0);
+  const confirmedBookingsResolved =
+    summary.confirmedBookings > 0
+      ? summary.confirmedBookings
+      : Number(bookingStatusTotals.confirmed || 0);
+  const pendingBookingsResolved =
+    summary.pendingBookings > 0
+      ? summary.pendingBookings
+      : Number(bookingStatusTotals.pending || 0);
+  const cancelledBookingsResolved =
+    summary.cancelledBookings > 0
+      ? summary.cancelledBookings
+      : Number(bookingStatusTotals.cancelled || 0);
+  const activeHostsResolved =
+    summary.activeHosts > 0 ? summary.activeHosts : topHosts.length;
+  const activeUsersResolved =
+    summary.activeUsers > 0
+      ? summary.activeUsers
+      : Math.max(summary.totalUsers, activeHostsResolved);
+
   const averageBookingValue = useMemo(() => {
-    if (summary.confirmedBookings === 0) {
+    if (confirmedBookingsResolved === 0) {
       return 0;
     }
 
-    return Math.round(summary.totalRevenue / summary.confirmedBookings);
-  }, [summary.confirmedBookings, summary.totalRevenue]);
+    return Math.round(totalRevenueResolved / confirmedBookingsResolved);
+  }, [confirmedBookingsResolved, totalRevenueResolved]);
 
   return (
     <div style={{ padding: "28px" }}>
@@ -155,13 +202,6 @@ export default function AdminReportsPage() {
             Live performance insights based on your real platform data.
           </p>
         </div>
-        <button
-          className="btn-outline-hs"
-          type="button"
-          style={{ display: "flex", alignItems: "center", gap: 6, fontSize: "0.87rem" }}
-        >
-          <Download size={15} /> Export Report
-        </button>
       </div>
 
       {pageError && (
@@ -185,30 +225,30 @@ export default function AdminReportsPage() {
           {
             icon: <DollarSign size={20} color="#2563EB" />,
             bg: "#eff6ff",
-            label: "Total Revenue",
-            value: formatCurrency(summary.totalRevenue),
+            label: "Gross Revenue",
+            value: formatCurrency(totalRevenueResolved),
             change: "Confirmed bookings only",
           },
           {
-            icon: <CalendarDays size={20} color="#16a34a" />,
+            icon: <DollarSign size={20} color="#16a34a" />,
             bg: "#dcfce7",
-            label: "Total Bookings",
-            value: summary.totalBookings,
-            change: `${summary.pendingBookings} still pending`,
+            label: "Platform Profit",
+            value: formatCurrency(platformRevenueResolved),
+            change: `${Math.round((summary.platformCommissionRate || 0.1) * 100)}% commission · ${activeHostsResolved} active hosts`,
           },
           {
-            icon: <TrendingUp size={20} color="#d97706" />,
+            icon: <CalendarDays size={20} color="#d97706" />,
             bg: "#fef3c7",
-            label: "Avg. Booking Value",
-            value: formatCurrency(averageBookingValue),
-            change: `${summary.confirmedBookings} confirmed stays`,
+            label: "Total Bookings",
+            value: totalBookingsResolved,
+            change: `${pendingBookingsResolved} pending · ${cancelledBookingsResolved} cancelled`,
           },
           {
-            icon: <Users size={20} color="#7c3aed" />,
+            icon: <TrendingUp size={20} color="#7c3aed" />,
             bg: "#f3e8ff",
-            label: "Active Hosts",
-            value: summary.activeHosts,
-            change: `${summary.activeUsers} active users overall`,
+            label: "Average Confirmed Booking",
+            value: formatCurrency(averageBookingValue),
+            change: `Host payouts ${formatCurrency(hostPayoutResolved)}`,
           },
         ].map((kpi) => (
           <div key={kpi.label} className="col-xl-3 col-md-6">
@@ -543,7 +583,7 @@ export default function AdminReportsPage() {
                       >
                         {formatCurrency(host.revenue)}
                       </div>
-                      <div style={{ fontSize: "0.75rem", color: "#94a3b8" }}>revenue</div>
+                      <div style={{ fontSize: "0.75rem", color: "#94a3b8" }}>host payout</div>
                     </div>
                   </div>
                 ))
@@ -575,7 +615,9 @@ export default function AdminReportsPage() {
             <thead>
               <tr>
                 <th>Month</th>
-                <th>Revenue</th>
+                <th>Gross Revenue</th>
+                <th>Platform Profit</th>
+                <th>Host Payout</th>
                 <th>Bookings</th>
                 <th>Avg. Per Booking</th>
                 <th>Growth</th>
@@ -584,13 +626,32 @@ export default function AdminReportsPage() {
             <tbody>
               {monthlyPerformance.map((row, index) => {
                 const previousRevenue =
-                  index > 0 ? monthlyPerformance[index - 1].revenue : row.revenue;
+                  index > 0
+                    ? monthlyPerformance[index - 1].grossRevenue
+                    : row.grossRevenue;
+                const monthlyGrossRevenue = row.grossRevenue || row.revenue;
+                const monthlyPlatformProfit =
+                  row.platformRevenue ??
+                  Number(
+                    (
+                      monthlyGrossRevenue *
+                      (summary.platformCommissionRate || 0.1)
+                    ).toFixed(2),
+                  );
+                const monthlyHostPayout =
+                  row.hostPayout ??
+                  Number((monthlyGrossRevenue - monthlyPlatformProfit).toFixed(2));
                 const growth =
                   index === 0 || previousRevenue === 0
                     ? 0
-                    : Math.round(((row.revenue - previousRevenue) / previousRevenue) * 100);
+                    : Math.round(
+                        ((monthlyGrossRevenue - previousRevenue) / previousRevenue) *
+                          100,
+                      );
                 const averagePerBooking =
-                  row.bookings > 0 ? Math.round(row.revenue / row.bookings) : 0;
+                  row.bookings > 0
+                    ? Math.round(monthlyGrossRevenue / row.bookings)
+                    : 0;
 
                 return (
                   <tr key={row.period}>
@@ -598,8 +659,10 @@ export default function AdminReportsPage() {
                       {formatPeriodLabel(row.period)}
                     </td>
                     <td style={{ fontWeight: 700, color: "#1e293b" }}>
-                      {formatCurrency(row.revenue)}
+                      {formatCurrency(monthlyGrossRevenue)}
                     </td>
+                    <td>{formatCurrency(monthlyPlatformProfit)}</td>
+                    <td>{formatCurrency(monthlyHostPayout)}</td>
                     <td>{row.bookings}</td>
                     <td>{formatCurrency(averagePerBooking)}</td>
                     <td>
@@ -622,7 +685,7 @@ export default function AdminReportsPage() {
               })}
               {!monthlyPerformance.length && (
                 <tr>
-                  <td colSpan={5} style={{ textAlign: "center", padding: "32px", color: "#94a3b8" }}>
+                  <td colSpan={7} style={{ textAlign: "center", padding: "32px", color: "#94a3b8" }}>
                     No report data available yet.
                   </td>
                 </tr>

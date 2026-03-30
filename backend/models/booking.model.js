@@ -1,4 +1,5 @@
 const db = require("../common/db");
+const { buildVariantUrl } = require("../common/propertyUpload");
 
 const Booking = {};
 
@@ -19,8 +20,15 @@ function formatDateOnly(value) {
     return "";
   }
 
+  const formatFromDate = (date) => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  };
+
   if (value instanceof Date && !Number.isNaN(value.getTime())) {
-    return value.toISOString().slice(0, 10);
+    return formatFromDate(value);
   }
 
   const stringValue = String(value);
@@ -31,7 +39,7 @@ function formatDateOnly(value) {
 
   const parsed = new Date(stringValue);
   if (!Number.isNaN(parsed.getTime())) {
-    return parsed.toISOString().slice(0, 10);
+    return formatFromDate(parsed);
   }
 
   return stringValue;
@@ -44,7 +52,7 @@ function mapBookingRow(row) {
     propertyId: Number(row.propertyId),
     propertyTitle: row.propertyTitle,
     propertyLocation: row.propertyLocation,
-    propertyImage: row.propertyImage,
+    propertyImage: buildVariantUrl(row.propertyImage, "thumb"),
     guestId: Number(row.guestId),
     guestName: row.guestName,
     guestEmail: row.guestEmail,

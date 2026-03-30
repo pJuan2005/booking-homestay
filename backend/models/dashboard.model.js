@@ -1,4 +1,11 @@
 const db = require("../common/db");
+const { buildVariantUrl } = require("../common/propertyUpload");
+const {
+  calculateRevenueSplit,
+  calculateRevenueTotals,
+  normalizeMoney,
+} = require("../common/bookingFinance");
+const PlatformSetting = require("./platform-setting.model");
 
 const Dashboard = {};
 
@@ -18,18 +25,9 @@ function formatMonthLabel(date) {
   });
 }
 
-function buildMonthlySeries(rows, monthCount) {
+function buildMonthlySeries(monthlyTotals, monthCount) {
   const now = new Date();
   const startDate = new Date(now.getFullYear(), now.getMonth() - (monthCount - 1), 1);
-  const totalsByMonth = new Map(
-    rows.map((row) => [
-      String(row.period),
-      {
-        revenue: toNumber(row.revenue),
-        bookings: toNumber(row.bookings),
-      },
-    ]),
-  );
 
   return Array.from({ length: monthCount }, (_, index) => {
     const currentDate = new Date(
@@ -38,22 +36,73 @@ function buildMonthlySeries(rows, monthCount) {
       1,
     );
     const period = formatMonthKey(currentDate);
-    const currentTotals = totalsByMonth.get(period) || {
-      revenue: 0,
+    const currentTotals = monthlyTotals.get(period) || {
+      grossRevenue: 0,
+      platformRevenue: 0,
+      hostPayout: 0,
       bookings: 0,
     };
 
     return {
       month: formatMonthLabel(currentDate),
       period,
-      revenue: currentTotals.revenue,
+      revenue: currentTotals.grossRevenue,
+      grossRevenue: currentTotals.grossRevenue,
+      platformRevenue: currentTotals.platformRevenue,
+      hostPayout: currentTotals.hostPayout,
       bookings: currentTotals.bookings,
     };
   });
 }
 
-async function getHostSummary(hostId) {
-  const [[propertySummary], [bookingSummary], [reviewSummary]] = await Promise.all([
+async function getConfirmedRevenueRows(query, params) {
+  const [rows] = await db.promise().query(query, params);
+
+  return rows.map((row) => ({
+    totalPrice: toNumber(row.totalPrice),
+  }));
+}
+
+function createEmptyMonthlyTotals() {
+  return {
+    grossRevenue: 0,
+    platformRevenue: 0,
+    hostPayout: 0,
+    bookings: 0,
+  };
+}
+
+function buildRevenueMapByMonth(rows, commissionRate) {
+  const totalsByMonth = new Map();
+
+  for (const row of rows) {
+    const period = String(row.period || "");
+    if (!period) {
+      continue;
+    }
+
+    const currentTotals = totalsByMonth.get(period) || createEmptyMonthlyTotals();
+    const split = calculateRevenueSplit(row.totalPrice, commissionRate);
+
+    currentTotals.grossRevenue = normalizeMoney(
+      currentTotals.grossRevenue + split.grossRevenue,
+    );
+    currentTotals.platformRevenue = normalizeMoney(
+      currentTotals.platformRevenue + split.platformRevenue,
+    );
+    currentTotals.hostPayout = normalizeMoney(
+      currentTotals.hostPayout + split.hostPayout,
+    );
+    currentTotals.bookings += 1;
+
+    totalsByMonth.set(period, currentTotals);
+  }
+
+  return totalsByMonth;
+}
+
+async function getHostSummary(hostId, platformSettings) {
+  const [propertyResult, bookingResult, reviewResult] = await Promise.all([
     db.promise().query(
       `SELECT
         COUNT(*) AS propertyCount,
@@ -78,16 +127,7 @@ async function getHostSummary(hostId) {
             WHEN YEARWEEK(created_at, 1) = YEARWEEK(CURDATE(), 1)
             THEN 1
           END
-        ) AS bookingsThisWeek,
-        COALESCE(
-          SUM(
-            CASE
-              WHEN status = 'confirmed' THEN total_price
-              ELSE 0
-            END
-          ),
-          0
-        ) AS totalRevenue
+        ) AS bookingsThisWeek
        FROM bookings
        WHERE property_id IN (
          SELECT id
@@ -111,6 +151,22 @@ async function getHostSummary(hostId) {
       [hostId],
     ),
   ]);
+  const propertySummary = propertyResult[0]?.[0] || {};
+  const bookingSummary = bookingResult[0]?.[0] || {};
+  const reviewSummary = reviewResult[0]?.[0] || {};
+  const revenueRows = await getConfirmedRevenueRows(
+    `SELECT b.total_price AS totalPrice
+     FROM bookings b
+     JOIN properties p ON p.id = b.property_id
+     WHERE p.host_id = ?
+       AND p.is_deleted = 0
+       AND b.status = 'confirmed'`,
+    [hostId],
+  );
+  const revenueTotals = calculateRevenueTotals(
+    revenueRows,
+    platformSettings.platformCommissionRate,
+  );
 
   return {
     propertyCount: toNumber(propertySummary?.propertyCount),
@@ -119,7 +175,10 @@ async function getHostSummary(hostId) {
     reviewCount: toNumber(reviewSummary?.reviewCount),
     propertiesThisMonth: toNumber(propertySummary?.propertiesThisMonth),
     bookingsThisWeek: toNumber(bookingSummary?.bookingsThisWeek),
-    totalRevenue: toNumber(bookingSummary?.totalRevenue),
+    grossRevenue: revenueTotals.grossRevenue,
+    totalRevenue: revenueTotals.hostPayout,
+    platformFeeAmount: revenueTotals.platformRevenue,
+    platformCommissionRate: revenueTotals.platformCommissionRate,
     averageRating: Number(reviewSummary?.averageRating || 0),
   };
 }
@@ -179,15 +238,15 @@ async function getHostProperties(hostId, limit = 5) {
   return rows.map((row) => ({
     id: toNumber(row.id),
     title: row.title,
-    image: row.image,
+    image: buildVariantUrl(row.image, "thumb"),
     price: toNumber(row.price),
     status: row.status,
     rating: Number(row.rating || 0),
   }));
 }
 
-async function getAdminSummary() {
-  const [[userSummary], [propertySummary], [bookingSummary]] = await Promise.all([
+async function getAdminSummary(platformSettings) {
+  const [userResult, propertyResult, bookingResult] = await Promise.all([
     db.promise().query(
       `SELECT
         COUNT(*) AS totalUsers,
@@ -210,19 +269,23 @@ async function getAdminSummary() {
         COUNT(*) AS totalBookings,
         COUNT(CASE WHEN status = 'confirmed' THEN 1 END) AS confirmedBookings,
         COUNT(CASE WHEN status = 'pending' THEN 1 END) AS pendingBookings,
-        COUNT(CASE WHEN status = 'cancelled' THEN 1 END) AS cancelledBookings,
-        COALESCE(
-          SUM(
-            CASE
-              WHEN status = 'confirmed' THEN total_price
-              ELSE 0
-            END
-          ),
-          0
-        ) AS totalRevenue
+        COUNT(CASE WHEN status = 'cancelled' THEN 1 END) AS cancelledBookings
        FROM bookings`,
     ),
   ]);
+  const userSummary = userResult[0]?.[0] || {};
+  const propertySummary = propertyResult[0]?.[0] || {};
+  const bookingSummary = bookingResult[0]?.[0] || {};
+  const revenueRows = await getConfirmedRevenueRows(
+    `SELECT total_price AS totalPrice
+     FROM bookings
+     WHERE status = 'confirmed'`,
+    [],
+  );
+  const revenueTotals = calculateRevenueTotals(
+    revenueRows,
+    platformSettings.platformCommissionRate,
+  );
 
   return {
     totalUsers: toNumber(userSummary?.totalUsers),
@@ -237,34 +300,32 @@ async function getAdminSummary() {
     confirmedBookings: toNumber(bookingSummary?.confirmedBookings),
     pendingBookings: toNumber(bookingSummary?.pendingBookings),
     cancelledBookings: toNumber(bookingSummary?.cancelledBookings),
-    totalRevenue: toNumber(bookingSummary?.totalRevenue),
+    totalRevenue: revenueTotals.grossRevenue,
+    grossRevenue: revenueTotals.grossRevenue,
+    platformRevenue: revenueTotals.platformRevenue,
+    hostPayoutTotal: revenueTotals.hostPayout,
+    platformCommissionRate: revenueTotals.platformCommissionRate,
   };
 }
 
-async function getMonthlyPerformance(monthCount = 7) {
+async function getMonthlyPerformance(platformSettings, monthCount = 7) {
   const now = new Date();
   const startDate = new Date(now.getFullYear(), now.getMonth() - (monthCount - 1), 1);
   const [rows] = await db.promise().query(
     `SELECT
       DATE_FORMAT(check_in, '%Y-%m-01') AS period,
-      COUNT(*) AS bookings,
-      COALESCE(
-        SUM(
-          CASE
-            WHEN status = 'confirmed' THEN total_price
-            ELSE 0
-          END
-        ),
-        0
-      ) AS revenue
+      total_price AS totalPrice
      FROM bookings
-     WHERE check_in >= ?
-     GROUP BY DATE_FORMAT(check_in, '%Y-%m-01')
+     WHERE status = 'confirmed'
+       AND check_in >= ?
      ORDER BY period ASC`,
     [formatMonthKey(startDate)],
   );
 
-  return buildMonthlySeries(rows, monthCount);
+  return buildMonthlySeries(
+    buildRevenueMapByMonth(rows, platformSettings.platformCommissionRate),
+    monthCount,
+  );
 }
 
 async function getRecentBookings(limit = 6) {
@@ -326,22 +387,13 @@ async function getPropertyTypeBreakdown() {
   }));
 }
 
-async function getTopHosts(limit = 5) {
+async function getTopHosts(platformSettings, limit = 5) {
   const [rows] = await db.promise().query(
     `SELECT
       u.id,
       u.full_name AS name,
       COUNT(DISTINCT p.id) AS properties,
-      COUNT(DISTINCT b.id) AS bookings,
-      COALESCE(
-        SUM(
-          CASE
-            WHEN b.status = 'confirmed' THEN b.total_price
-            ELSE 0
-          END
-        ),
-        0
-      ) AS revenue
+      COUNT(DISTINCT b.id) AS bookings
      FROM users u
      JOIN properties p
        ON p.host_id = u.id
@@ -349,23 +401,80 @@ async function getTopHosts(limit = 5) {
      LEFT JOIN bookings b ON b.property_id = p.id
      WHERE u.role = 'host'
      GROUP BY u.id
-     ORDER BY revenue DESC, bookings DESC, properties DESC
-     LIMIT ?`,
-    [limit],
+      ORDER BY bookings DESC, properties DESC, u.full_name ASC`,
   );
 
-  return rows.map((row) => ({
-    id: toNumber(row.id),
-    name: row.name,
-    properties: toNumber(row.properties),
-    bookings: toNumber(row.bookings),
-    revenue: toNumber(row.revenue),
-  }));
+  const [revenueRows] = await db.promise().query(
+    `SELECT
+      p.host_id AS hostId,
+      b.total_price AS totalPrice
+     FROM bookings b
+     JOIN properties p
+       ON p.id = b.property_id
+      AND p.is_deleted = 0
+     WHERE b.status = 'confirmed'`,
+  );
+
+  const revenueByHost = new Map();
+
+  for (const row of revenueRows) {
+    const hostId = toNumber(row.hostId);
+    const currentTotals = revenueByHost.get(hostId) || {
+      grossRevenue: 0,
+      platformRevenue: 0,
+      hostPayout: 0,
+    };
+    const split = calculateRevenueSplit(
+      row.totalPrice,
+      platformSettings.platformCommissionRate,
+    );
+
+    currentTotals.grossRevenue = normalizeMoney(
+      currentTotals.grossRevenue + split.grossRevenue,
+    );
+    currentTotals.platformRevenue = normalizeMoney(
+      currentTotals.platformRevenue + split.platformRevenue,
+    );
+    currentTotals.hostPayout = normalizeMoney(
+      currentTotals.hostPayout + split.hostPayout,
+    );
+
+    revenueByHost.set(hostId, currentTotals);
+  }
+
+  return rows.map((row) => {
+    const revenueTotals = revenueByHost.get(toNumber(row.id)) || {
+      grossRevenue: 0,
+      platformRevenue: 0,
+      hostPayout: 0,
+    };
+
+    return {
+      id: toNumber(row.id),
+      name: row.name,
+      properties: toNumber(row.properties),
+      bookings: toNumber(row.bookings),
+      revenue: revenueTotals.hostPayout,
+      grossRevenue: revenueTotals.grossRevenue,
+      platformRevenue: revenueTotals.platformRevenue,
+    };
+  }).sort((left, right) => {
+    if (right.revenue !== left.revenue) {
+      return right.revenue - left.revenue;
+    }
+
+    if (right.bookings !== left.bookings) {
+      return right.bookings - left.bookings;
+    }
+
+    return right.properties - left.properties;
+  }).slice(0, limit);
 }
 
 Dashboard.getHostDashboard = async (hostId) => {
+  const platformSettings = await PlatformSetting.getPlatformSettings();
   const [summary, recentBookings, properties] = await Promise.all([
-    getHostSummary(hostId),
+    getHostSummary(hostId, platformSettings),
     getHostRecentBookings(hostId),
     getHostProperties(hostId),
   ]);
@@ -378,9 +487,10 @@ Dashboard.getHostDashboard = async (hostId) => {
 };
 
 Dashboard.getAdminDashboard = async () => {
+  const platformSettings = await PlatformSetting.getPlatformSettings();
   const [summary, monthlyPerformance, recentBookings] = await Promise.all([
-    getAdminSummary(),
-    getMonthlyPerformance(7),
+    getAdminSummary(platformSettings),
+    getMonthlyPerformance(platformSettings, 7),
     getRecentBookings(6),
   ]);
 
@@ -392,13 +502,14 @@ Dashboard.getAdminDashboard = async () => {
 };
 
 Dashboard.getAdminReports = async () => {
+  const platformSettings = await PlatformSetting.getPlatformSettings();
   const [summary, monthlyPerformance, bookingStatus, propertyTypes, topHosts] =
     await Promise.all([
-      getAdminSummary(),
-      getMonthlyPerformance(7),
+      getAdminSummary(platformSettings),
+      getMonthlyPerformance(platformSettings, 7),
       getBookingStatusBreakdown(),
       getPropertyTypeBreakdown(),
-      getTopHosts(5),
+      getTopHosts(platformSettings, 5),
     ]);
 
   return {

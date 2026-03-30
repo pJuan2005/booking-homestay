@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -24,6 +25,7 @@ import { BookingChatDialog } from "@/components/shared/BookingChatDialog";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { PaymentStatusBadge } from "@/components/shared/PaymentStatusBadge";
 import { PaymentInstructionsCard } from "@/components/shared/PaymentInstructionsCard";
+import { isBackendUploadImage } from "@/lib/image";
 import {
   cancelBooking,
   getMyBookings,
@@ -308,7 +310,15 @@ export default function UserDashboard() {
                           <tr key={booking.id}>
                             <td>
                               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                                <img src={booking.propertyImage} alt={booking.propertyTitle} style={{ width: 48, height: 48, borderRadius: 12, objectFit: "cover", flexShrink: 0 }} />
+                                <Image
+                                  src={booking.propertyImage}
+                                  alt={booking.propertyTitle}
+                                  width={48}
+                                  height={48}
+                                  sizes="48px"
+                                  unoptimized={isBackendUploadImage(booking.propertyImage)}
+                                  style={{ width: 48, height: 48, borderRadius: 12, objectFit: "cover", flexShrink: 0 }}
+                                />
                                 <div>
                                   <div style={{ fontWeight: 700, color: "#1e293b", fontSize: "0.88rem" }}>{booking.propertyTitle}</div>
                                   <div style={{ color: "#94a3b8", fontSize: "0.76rem", marginTop: 2 }}>{booking.bookingCode}</div>

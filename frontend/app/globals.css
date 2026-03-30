@@ -252,6 +252,54 @@ select.hs-form-control { cursor: pointer; appearance: auto; }
   margin-bottom: 6px; display: block;
 }
 
+.hs-datepicker-wrapper {
+  width: 100%;
+}
+
+.hs-datepicker-input {
+  border: none;
+  outline: none;
+  width: 100%;
+  font-size: 0.85rem;
+  color: #475569;
+  padding: 0;
+  background: transparent;
+  margin-top: 2px;
+}
+
+.hs-datepicker-input:disabled {
+  color: #94a3b8;
+  cursor: not-allowed;
+}
+
+.react-datepicker {
+  border: 1px solid var(--hs-border) !important;
+  border-radius: 14px !important;
+  overflow: hidden;
+  box-shadow: 0 16px 40px rgba(15, 23, 42, 0.12);
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
+}
+
+.react-datepicker__header {
+  background: #eff6ff !important;
+  border-bottom: 1px solid var(--hs-border) !important;
+}
+
+.react-datepicker__day--selected,
+.react-datepicker__day--keyboard-selected {
+  background: var(--hs-primary) !important;
+  color: #fff !important;
+}
+
+.react-datepicker__day--disabled {
+  color: #cbd5e1 !important;
+  text-decoration: line-through;
+}
+
+.react-datepicker__triangle {
+  display: none;
+}
+
 /* ── Tables ── */
 .hs-table { width: 100%; border-collapse: collapse; }
 .hs-table th {
@@ -273,14 +321,42 @@ select.hs-form-control { cursor: pointer; appearance: auto; }
 .hs-footer a { color: #94a3b8; text-decoration: none; font-size: 0.87rem; line-height: 2; transition: color 0.15s; display: block; }
 .hs-footer a:hover { color: #e2e8f0; }
 .hs-footer-divider { border-color: rgba(255,255,255,0.08); margin: 28px 0 20px; }
-.hs-social-btn {
+.hs-footer-socials {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.hs-footer a.hs-social-btn {
   width: 36px; height: 36px; border-radius: 8px;
   background: rgba(255,255,255,0.08);
-  display: inline-flex; align-items: center; justify-content: center;
-  color: #94a3b8; text-decoration: none; transition: all 0.15s; line-height: 1; flex-shrink: 0; vertical-align: middle;
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+  color: #94a3b8;
+  text-decoration: none;
+  transition: all 0.15s;
+  line-height: 0 !important;
+  flex-shrink: 0;
+  vertical-align: middle;
+  padding: 0;
+  font-size: 0;
 }
-.hs-social-btn svg { width: 16px; height: 16px; display: block; flex-shrink: 0; }
-.hs-social-btn:hover { background: var(--hs-primary); color: #fff; }
+.hs-social-icon {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.hs-footer a.hs-social-btn svg {
+  width: 16px;
+  height: 16px;
+  display: block;
+  flex-shrink: 0;
+  margin: 0;
+  transform: translateY(1px);
+}
+.hs-footer a.hs-social-btn:hover { background: var(--hs-primary); color: #fff; }
 
 /* ── Auth Pages ── */
 .hs-auth-page {

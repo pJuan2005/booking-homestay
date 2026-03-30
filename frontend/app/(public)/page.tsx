@@ -1,6 +1,7 @@
-"use client";
+﻿"use client";
 
-import { useEffect, useState } from "react";
+import Image from "next/image";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -19,6 +20,24 @@ import { destinations } from "@/lib/destinations";
 import { PropertyCard } from "@/components/shared/PropertyCard";
 import { getProperties, type PropertySummary } from "@/services/propertyService";
 
+const QUICK_SEARCH_TAGS = [
+  "Da Nang",
+  "Ha Noi",
+  "Ho Chi Minh City",
+  "Da Lat",
+  "Villa",
+  "Apartment",
+];
+
+const PROPERTY_TYPE_TAGS = new Set(["Villa", "Apartment"]);
+
+interface HomeStats {
+  totalProperties: number;
+  totalCities: number;
+  totalHosts: number;
+  averageRating: number;
+}
+
 export default function HomePage() {
   const router = useRouter();
   const [searchForm, setSearchForm] = useState({
@@ -27,8 +46,16 @@ export default function HomePage() {
     checkOut: "",
     guests: "1",
   });
+  const [searchError, setSearchError] = useState("");
   const [featuredProperties, setFeaturedProperties] = useState<PropertySummary[]>([]);
   const [isLoadingFeatured, setIsLoadingFeatured] = useState(true);
+  const [destinationCounts, setDestinationCounts] = useState<Record<string, number>>({});
+  const [homeStats, setHomeStats] = useState<HomeStats>({
+    totalProperties: 0,
+    totalCities: 0,
+    totalHosts: 0,
+    averageRating: 0,
+  });
 
   useEffect(() => {
     let mounted = true;
@@ -46,12 +73,49 @@ export default function HomePage() {
           .sort((left, right) => right.rating - left.rating)
           .slice(0, 3);
 
+        const uniqueCities = new Set(
+          data.map((property) => property.city).filter(Boolean),
+        ).size;
+        const uniqueHosts = new Set(
+          data.map((property) => property.hostId).filter(Boolean),
+        ).size;
+        const ratedProperties = data.filter((property) => property.rating > 0);
+        const averageRating =
+          ratedProperties.length > 0
+            ? ratedProperties.reduce((sum, property) => sum + property.rating, 0) /
+              ratedProperties.length
+            : 0;
+        const nextDestinationCounts = data.reduce<Record<string, number>>(
+          (accumulator, property) => {
+            if (property.city) {
+              accumulator[property.city] = (accumulator[property.city] || 0) + 1;
+            }
+
+            return accumulator;
+          },
+          {},
+        );
+
         setFeaturedProperties(
           nextFeatured.length > 0 ? nextFeatured : data.slice(0, 3),
         );
+        setDestinationCounts(nextDestinationCounts);
+        setHomeStats({
+          totalProperties: data.length,
+          totalCities: uniqueCities,
+          totalHosts: uniqueHosts,
+          averageRating,
+        });
       } catch (_error) {
         if (mounted) {
           setFeaturedProperties([]);
+          setDestinationCounts({});
+          setHomeStats({
+            totalProperties: 0,
+            totalCities: 0,
+            totalHosts: 0,
+            averageRating: 0,
+          });
         }
       } finally {
         if (mounted) {
@@ -67,10 +131,96 @@ export default function HomePage() {
     };
   }, []);
 
+  function updateSearchField(field: keyof typeof searchForm, value: string) {
+    setSearchForm((prev) => ({
+      ...prev,
+      [field]: value,
+    }));
+
+    if (searchError) {
+      setSearchError("");
+    }
+  }
+
+  function buildSearchUrl(overrides: Partial<typeof searchForm> = {}) {
+    const nextSearchForm = {
+      ...searchForm,
+      ...overrides,
+    };
+    const params = new URLSearchParams();
+
+    if (nextSearchForm.location.trim()) {
+      params.set("location", nextSearchForm.location.trim());
+    }
+
+    if (nextSearchForm.checkIn) {
+      params.set("checkIn", nextSearchForm.checkIn);
+    }
+
+    if (nextSearchForm.checkOut) {
+      params.set("checkOut", nextSearchForm.checkOut);
+    }
+
+    if (nextSearchForm.guests && nextSearchForm.guests !== "1") {
+      params.set("guests", nextSearchForm.guests);
+    }
+
+    const queryString = params.toString();
+    return `/listings${queryString ? `?${queryString}` : ""}`;
+  }
+
   function handleSearch(event: React.FormEvent) {
     event.preventDefault();
-    router.push("/listings");
+
+    if (
+      searchForm.checkIn &&
+      searchForm.checkOut &&
+      new Date(searchForm.checkOut) <= new Date(searchForm.checkIn)
+    ) {
+      setSearchError("Check-out date must be after check-in date.");
+      return;
+    }
+
+    setSearchError("");
+    router.push(buildSearchUrl());
   }
+
+  function handleQuickTagSearch(tag: string) {
+    const nextUrl = PROPERTY_TYPE_TAGS.has(tag)
+      ? `/listings?type=${encodeURIComponent(tag)}`
+      : `/listings?location=${encodeURIComponent(tag)}`;
+
+    router.push(nextUrl);
+  }
+
+  const statItems = [
+    {
+      value: homeStats.totalProperties > 0 ? `${homeStats.totalProperties}+` : "0",
+      label: "active stays",
+    },
+    {
+      value: homeStats.totalCities > 0 ? `${homeStats.totalCities}+` : "0",
+      label: "destinations",
+    },
+    {
+      value: homeStats.totalHosts > 0 ? `${homeStats.totalHosts}+` : "0",
+      label: "trusted hosts",
+    },
+    {
+      value:
+        homeStats.averageRating > 0 ? homeStats.averageRating.toFixed(1) : "New",
+      label: "average rating",
+    },
+  ];
+
+  const displayDestinations = useMemo(
+    () =>
+      destinations.map((destination) => ({
+        ...destination,
+        properties: destinationCounts[destination.name] ?? 0,
+      })),
+    [destinationCounts],
+  );
 
   return (
     <div>
@@ -100,7 +250,7 @@ export default function HomePage() {
               >
                 <Award size={14} color="#fbbf24" />
                 <span style={{ color: "#fff", fontSize: "0.82rem", fontWeight: 500 }}>
-                  Trusted by thousands of travelers worldwide
+                  Trusted by travelers planning city breaks, family stays, and getaways
                 </span>
               </div>
 
@@ -122,13 +272,13 @@ export default function HomePage() {
                 style={{
                   color: "rgba(255,255,255,0.82)",
                   fontSize: "1.05rem",
-                  maxWidth: 520,
+                  maxWidth: 560,
                   margin: "0 auto 32px",
                   lineHeight: 1.7,
                 }}
               >
-                Discover unique homestays, cabins, penthouses, and villas loaded
-                from the live system.
+                Discover carefully selected homestays, cabins, penthouses, and
+                villas for weekend escapes, longer stays, and memorable trips.
               </p>
 
               <div className="hs-search-card" style={{ textAlign: "left" }}>
@@ -143,13 +293,10 @@ export default function HomePage() {
                       </label>
                       <input
                         className="hs-form-control"
-                        placeholder="Where to go?"
+                        placeholder="Where do you want to stay?"
                         value={searchForm.location}
                         onChange={(event) =>
-                          setSearchForm((prev) => ({
-                            ...prev,
-                            location: event.target.value,
-                          }))
+                          updateSearchField("location", event.target.value)
                         }
                       />
                     </div>
@@ -165,10 +312,7 @@ export default function HomePage() {
                         className="hs-form-control"
                         value={searchForm.checkIn}
                         onChange={(event) =>
-                          setSearchForm((prev) => ({
-                            ...prev,
-                            checkIn: event.target.value,
-                          }))
+                          updateSearchField("checkIn", event.target.value)
                         }
                       />
                     </div>
@@ -184,10 +328,7 @@ export default function HomePage() {
                         className="hs-form-control"
                         value={searchForm.checkOut}
                         onChange={(event) =>
-                          setSearchForm((prev) => ({
-                            ...prev,
-                            checkOut: event.target.value,
-                          }))
+                          updateSearchField("checkOut", event.target.value)
                         }
                       />
                     </div>
@@ -202,10 +343,7 @@ export default function HomePage() {
                         className="hs-form-control"
                         value={searchForm.guests}
                         onChange={(event) =>
-                          setSearchForm((prev) => ({
-                            ...prev,
-                            guests: event.target.value,
-                          }))
+                          updateSearchField("guests", event.target.value)
                         }
                       >
                         {[1, 2, 3, 4, 5, 6, 7, 8].map((count) => (
@@ -233,11 +371,24 @@ export default function HomePage() {
                   </div>
                 </form>
 
+                {searchError ? (
+                  <div
+                    style={{
+                      marginTop: 12,
+                      color: "#b91c1c",
+                      fontSize: "0.82rem",
+                      fontWeight: 600,
+                    }}
+                  >
+                    {searchError}
+                  </div>
+                ) : null}
+
                 <div style={{ marginTop: 16, display: "flex", flexWrap: "wrap", gap: 8 }}>
-                  {["Bali", "Paris", "Tokyo", "New York", "Villa", "Cabin"].map((tag) => (
+                  {QUICK_SEARCH_TAGS.map((tag) => (
                     <button
                       key={tag}
-                      onClick={() => router.push("/listings")}
+                      onClick={() => handleQuickTagSearch(tag)}
                       style={{
                         background: "#f1f5f9",
                         border: "1px solid #e2e8f0",
@@ -254,13 +405,16 @@ export default function HomePage() {
                 </div>
               </div>
 
-              <div style={{ display: "flex", justifyContent: "center", flexWrap: "wrap", gap: 24, marginTop: 32 }}>
-                {[
-                  { value: "14+", label: "Seeded properties" },
-                  { value: "3", label: "Property statuses" },
-                  { value: "24/7", label: "Host access" },
-                  { value: "4.9+", label: "Average rating" },
-                ].map((item) => (
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "center",
+                  flexWrap: "wrap",
+                  gap: 24,
+                  marginTop: 32,
+                }}
+              >
+                {statItems.map((item) => (
                   <div key={item.label} style={{ textAlign: "center" }}>
                     <div style={{ color: "#fff", fontWeight: 800, fontSize: "1.4rem" }}>
                       {item.value}
@@ -292,13 +446,18 @@ export default function HomePage() {
               <div className="hs-section-divider" />
               <h2 className="hs-section-title">Featured Homestays</h2>
               <p className="hs-section-subtitle">
-                These properties are loaded directly from the current database.
+                Handpicked stays worth discovering for your next trip.
               </p>
             </div>
             <Link href="/listings" style={{ textDecoration: "none" }}>
               <button
                 className="btn-outline-hs"
-                style={{ display: "flex", alignItems: "center", gap: 6, whiteSpace: "nowrap" }}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 6,
+                  whiteSpace: "nowrap",
+                }}
               >
                 View All <ArrowRight size={14} />
               </button>
@@ -349,16 +508,20 @@ export default function HomePage() {
             <p className="hs-section-subtitle">Explore locations travelers love</p>
           </div>
           <div className="row g-4">
-            {destinations.map((destination) => (
+            {displayDestinations.map((destination) => (
               <div key={destination.id} className="col-lg-3 col-md-6 col-6">
-                <Link href="/listings" style={{ textDecoration: "none" }}>
+                <Link
+                  href={`/listings?location=${encodeURIComponent(destination.name)}`}
+                  style={{ textDecoration: "none" }}
+                >
                   <div className="hs-dest-card">
-                    <img
+                    <Image
                       src={destination.image}
                       alt={destination.name}
                       className="hs-dest-img"
-                      loading="lazy"
-                      decoding="async"
+                      fill
+                      sizes="(max-width: 768px) 50vw, (max-width: 1200px) 25vw, 25vw"
+                      style={{ objectFit: "cover" }}
                     />
                     <div className="hs-dest-overlay" />
                     <div className="hs-dest-label">
@@ -366,7 +529,7 @@ export default function HomePage() {
                         {destination.name}
                       </div>
                       <div style={{ fontSize: "0.78rem", opacity: 0.82 }}>
-                        {destination.country} • {destination.properties} properties
+                        {destination.country} - {destination.properties} stays
                       </div>
                     </div>
                   </div>
@@ -390,19 +553,19 @@ export default function HomePage() {
                 icon: <Search size={26} color="#2563EB" />,
                 step: "01",
                 title: "Search and discover",
-                desc: "Browse verified homestays and filter by your destination, price, and stay preferences.",
+                desc: "Browse verified homestays and filter by destination, dates, guest count, and stay style.",
               },
               {
                 icon: <Calendar size={26} color="#2563EB" />,
                 step: "02",
                 title: "Book your stay",
-                desc: "Choose your dates, review the property details, and complete your booking flow.",
+                desc: "Choose your dates, review the property details, and complete the booking flow step by step.",
               },
               {
                 icon: <Shield size={26} color="#2563EB" />,
                 step: "03",
                 title: "Stay with confidence",
-                desc: "Enjoy your trip knowing your booking and property data are managed in the live system.",
+                desc: "Pay securely, stay informed, and keep every booking detail in one place.",
               },
             ].map((step) => (
               <div key={step.step} className="col-lg-4 col-md-4">
@@ -454,22 +617,22 @@ export default function HomePage() {
               {
                 icon: <Shield size={20} color="#2563EB" />,
                 title: "Secure sessions",
-                desc: "Authenticated access for guests, hosts, and admins",
+                desc: "Protected access for guests, hosts, and administrators",
               },
               {
                 icon: <Star size={20} color="#2563EB" />,
                 title: "Verified ratings",
-                desc: "Review scores are pulled from real property data",
+                desc: "Guest feedback helps you choose stays with confidence",
               },
               {
                 icon: <Clock size={20} color="#2563EB" />,
                 title: "Fast browsing",
-                desc: "Lists are optimized with lazy-loaded images and pagination",
+                desc: "Search faster with responsive filters and smoother browsing",
               },
               {
                 icon: <Award size={20} color="#2563EB" />,
                 title: "Featured stays",
-                desc: "Homepage spotlight uses the current database, not hard-coded cards",
+                desc: "Curated highlights refreshed from current featured listings",
               },
             ].map((item) => (
               <div key={item.title} className="col-lg-3 col-md-6 col-6">
@@ -531,8 +694,8 @@ export default function HomePage() {
               fontSize: "1rem",
             }}
           >
-            Join the platform as a host and publish your own listing through the
-            live property workflow.
+            Join as a host, publish your property, and welcome guests with a
+            booking flow built for real stays.
           </p>
           <div style={{ display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap" }}>
             <Link href="/auth/register">
@@ -574,3 +737,4 @@ export default function HomePage() {
     </div>
   );
 }
+

@@ -1,3 +1,9 @@
+const {
+  convertUsdToVnd,
+  getDefaultUsdToVndRate,
+  normalizeUsdToVndRate,
+} = require("./bookingFinance");
+
 const DEFAULT_PAYMENT_CONFIG = {
   bankCode: process.env.PAYMENT_BANK_CODE || "TCB",
   bankName: process.env.PAYMENT_BANK_NAME || "Techcombank",
@@ -11,9 +17,13 @@ function getPaymentConfig() {
   };
 }
 
-function buildPaymentInfo(booking) {
+function buildPaymentInfo(booking, platformSettings = {}) {
   const config = getPaymentConfig();
-  const amount = Number(booking.totalPrice || 0);
+  const amountUsd = Number(booking.totalPrice || 0);
+  const exchangeRate = normalizeUsdToVndRate(
+    platformSettings.usdToVndRate || getDefaultUsdToVndRate(),
+  );
+  const amountVnd = convertUsdToVnd(amountUsd, exchangeRate);
   const transferContent =
     booking.paymentReference || booking.bookingCode || `HSBK${booking.id}`;
 
@@ -23,10 +33,14 @@ function buildPaymentInfo(booking) {
     bankName: config.bankName,
     accountNumber: config.accountNumber,
     accountName: config.accountName,
-    amount,
+    amount: amountUsd,
+    amountUsd,
+    amountVnd,
+    exchangeRate,
+    currency: "VND",
     transferContent,
     qrImageUrl: `https://img.vietqr.io/image/${config.bankCode}-${config.accountNumber}-compact2.png?amount=${encodeURIComponent(
-      String(Math.round(amount)),
+      String(amountVnd),
     )}&addInfo=${encodeURIComponent(transferContent)}&accountName=${encodeURIComponent(config.accountName)}`,
   };
 }

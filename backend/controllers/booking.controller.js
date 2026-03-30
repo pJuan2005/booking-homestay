@@ -2,6 +2,7 @@ const Booking = require("../models/booking.model");
 const { buildPaymentInfo } = require("../common/paymentConfig");
 const { savePaymentProof } = require("../common/bookingUpload");
 const { removeManagedFile } = require("../common/propertyUpload");
+const PlatformSetting = require("../models/platform-setting.model");
 
 function parseInteger(value, fallback = 0) {
   const parsed = Number(value);
@@ -30,14 +31,21 @@ function getNightCount(checkIn, checkOut) {
   return Math.round(diff / (1000 * 60 * 60 * 24));
 }
 
+function formatDateInput(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 function normalizeDecision(value) {
   return String(value || "").trim().toLowerCase();
 }
 
-function serializeBooking(booking) {
+function serializeBooking(booking, platformSettings) {
   return {
     ...booking,
-    paymentInfo: buildPaymentInfo(booking),
+    paymentInfo: buildPaymentInfo(booking, platformSettings),
   };
 }
 
@@ -105,10 +113,13 @@ exports.createBooking = async (req, res) => {
       });
     }
 
+    const normalizedCheckIn = formatDateInput(checkIn);
+    const normalizedCheckOut = formatDateInput(checkOut);
+
     const hasConflict = await Booking.hasDateConflict(
       propertyId,
-      req.body.checkIn,
-      req.body.checkOut,
+      normalizedCheckIn,
+      normalizedCheckOut,
     );
 
     if (hasConflict) {
@@ -125,19 +136,20 @@ exports.createBooking = async (req, res) => {
     const bookingId = await Booking.create({
       propertyId,
       guestId,
-      checkIn: req.body.checkIn,
-      checkOut: req.body.checkOut,
+      checkIn: normalizedCheckIn,
+      checkOut: normalizedCheckOut,
       nights,
       guests,
       totalPrice,
     });
 
     const booking = await Booking.getGuestById(bookingId, guestId);
+    const platformSettings = await PlatformSetting.getPlatformSettings();
 
     return res.status(201).json({
       message:
         "Booking request created successfully. Please transfer the payment and upload your payment proof.",
-      data: serializeBooking(booking),
+      data: serializeBooking(booking, platformSettings),
     });
   } catch (_error) {
     return res.status(500).json({
@@ -149,7 +161,10 @@ exports.createBooking = async (req, res) => {
 exports.getGuestBookings = async (req, res) => {
   try {
     const bookings = await Booking.getByGuest(req.currentUser.id);
-    return res.json(bookings.map(serializeBooking));
+    const platformSettings = await PlatformSetting.getPlatformSettings();
+    return res.json(
+      bookings.map((booking) => serializeBooking(booking, platformSettings)),
+    );
   } catch (_error) {
     return res.status(500).json({
       message: "Unable to load your bookings.",
@@ -166,7 +181,9 @@ exports.getGuestBookingById = async (req, res) => {
       });
     }
 
-    return res.json(serializeBooking(booking));
+    const platformSettings = await PlatformSetting.getPlatformSettings();
+
+    return res.json(serializeBooking(booking, platformSettings));
   } catch (_error) {
     return res.status(500).json({
       message: "Unable to load the booking details.",
@@ -203,11 +220,12 @@ exports.uploadPaymentProof = async (req, res) => {
 
     await Booking.updatePaymentProof(booking.id, req.currentUser.id, paymentProofImage);
     const updatedBooking = await Booking.getGuestById(booking.id, req.currentUser.id);
+    const platformSettings = await PlatformSetting.getPlatformSettings();
 
     return res.json({
       message:
         "Payment proof uploaded successfully. Your booking is now waiting for review.",
-      data: serializeBooking(updatedBooking),
+      data: serializeBooking(updatedBooking, platformSettings),
     });
   } catch (_error) {
     return res.status(500).json({
@@ -233,10 +251,11 @@ exports.cancelGuestBooking = async (req, res) => {
 
     await Booking.cancelByGuest(booking.id, req.currentUser.id);
     const updatedBooking = await Booking.getGuestById(booking.id, req.currentUser.id);
+    const platformSettings = await PlatformSetting.getPlatformSettings();
 
     return res.json({
       message: "Booking cancelled successfully.",
-      data: serializeBooking(updatedBooking),
+      data: serializeBooking(updatedBooking, platformSettings),
     });
   } catch (_error) {
     return res.status(500).json({
@@ -248,7 +267,10 @@ exports.cancelGuestBooking = async (req, res) => {
 exports.getHostBookings = async (req, res) => {
   try {
     const bookings = await Booking.getByHost(req.currentUser.id);
-    return res.json(bookings.map(serializeBooking));
+    const platformSettings = await PlatformSetting.getPlatformSettings();
+    return res.json(
+      bookings.map((booking) => serializeBooking(booking, platformSettings)),
+    );
   } catch (_error) {
     return res.status(500).json({
       message: "Unable to load the host booking list.",
@@ -265,7 +287,9 @@ exports.getHostBookingById = async (req, res) => {
       });
     }
 
-    return res.json(serializeBooking(booking));
+    const platformSettings = await PlatformSetting.getPlatformSettings();
+
+    return res.json(serializeBooking(booking, platformSettings));
   } catch (_error) {
     return res.status(500).json({
       message: "Unable to load the host booking details.",
@@ -315,13 +339,14 @@ exports.reviewBookingByHost = async (req, res) => {
     }
 
     const updatedBooking = await Booking.getHostById(booking.id, req.currentUser.id);
+    const platformSettings = await PlatformSetting.getPlatformSettings();
 
     return res.json({
       message:
         payload.decision === "approve"
           ? "Booking confirmed successfully."
           : "Booking rejected successfully.",
-      data: serializeBooking(updatedBooking),
+      data: serializeBooking(updatedBooking, platformSettings),
     });
   } catch (_error) {
     return res.status(500).json({
@@ -333,7 +358,10 @@ exports.reviewBookingByHost = async (req, res) => {
 exports.getAdminBookings = async (_req, res) => {
   try {
     const bookings = await Booking.getAllAdmin();
-    return res.json(bookings.map(serializeBooking));
+    const platformSettings = await PlatformSetting.getPlatformSettings();
+    return res.json(
+      bookings.map((booking) => serializeBooking(booking, platformSettings)),
+    );
   } catch (_error) {
     return res.status(500).json({
       message: "Unable to load the admin booking list.",
@@ -350,7 +378,9 @@ exports.getAdminBookingById = async (req, res) => {
       });
     }
 
-    return res.json(serializeBooking(booking));
+    const platformSettings = await PlatformSetting.getPlatformSettings();
+
+    return res.json(serializeBooking(booking, platformSettings));
   } catch (_error) {
     return res.status(500).json({
       message: "Unable to load the admin booking details.",
@@ -400,13 +430,14 @@ exports.reviewBookingByAdmin = async (req, res) => {
     }
 
     const updatedBooking = await Booking.getAdminById(booking.id);
+    const platformSettings = await PlatformSetting.getPlatformSettings();
 
     return res.json({
       message:
         payload.decision === "approve"
           ? "Booking confirmed successfully."
           : "Booking rejected successfully.",
-      data: serializeBooking(updatedBooking),
+      data: serializeBooking(updatedBooking, platformSettings),
     });
   } catch (_error) {
     return res.status(500).json({

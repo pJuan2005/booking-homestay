@@ -162,9 +162,27 @@ function sendValidationError(res, errors) {
   });
 }
 
-exports.getAllProperties = async (_req, res) => {
+exports.getAllProperties = async (req, res) => {
+  const filters = {
+    location: String(req.query.location || "").trim(),
+    type: String(req.query.type || "").trim(),
+    guests: parseInteger(req.query.guests, 0),
+    checkIn: String(req.query.checkIn || "").trim(),
+    checkOut: String(req.query.checkOut || "").trim(),
+  };
+
+  if (
+    filters.checkIn &&
+    filters.checkOut &&
+    new Date(filters.checkOut) <= new Date(filters.checkIn)
+  ) {
+    return res.status(400).json({
+      message: "Check-out date must be after check-in date.",
+    });
+  }
+
   try {
-    const data = await Property.getAll();
+    const data = await Property.getAll(filters);
     res.json(data);
   } catch (_error) {
     res.status(500).json({
@@ -186,6 +204,68 @@ exports.getPropertyById = async (req, res) => {
   } catch (_error) {
     res.status(500).json({
       message: "Unable to load the property details.",
+    });
+  }
+};
+
+exports.getPropertyAvailability = async (req, res) => {
+  const filters = {
+    checkIn: String(req.query.checkIn || "").trim(),
+    checkOut: String(req.query.checkOut || "").trim(),
+  };
+
+  if (!filters.checkIn || !filters.checkOut) {
+    return res.status(400).json({
+      message: "Check-in and check-out dates are required.",
+    });
+  }
+
+  if (new Date(filters.checkOut) <= new Date(filters.checkIn)) {
+    return res.status(400).json({
+      message: "Check-out date must be after check-in date.",
+    });
+  }
+
+  try {
+    const result = await Property.checkAvailability(req.params.id, filters);
+
+    if (!result.exists) {
+      return res.status(404).json({
+        message: "Property not found.",
+      });
+    }
+
+    return res.json({
+      available: result.available,
+      message:
+        result.reason ||
+        (result.available
+          ? "Selected dates are available for booking."
+          : "Selected dates are unavailable."),
+    });
+  } catch (_error) {
+    return res.status(500).json({
+      message: "Unable to verify property availability right now.",
+    });
+  }
+};
+
+exports.getPropertyUnavailableDates = async (req, res) => {
+  try {
+    const result = await Property.getUnavailableDateRanges(req.params.id);
+
+    if (!result.exists) {
+      return res.status(404).json({
+        message: "Property not found.",
+      });
+    }
+
+    return res.json({
+      ranges: result.ranges,
+    });
+  } catch (_error) {
+    return res.status(500).json({
+      message: "Unable to load unavailable dates right now.",
     });
   }
 };
@@ -371,7 +451,9 @@ exports.updateHostProperty = async (req, res) => {
           )
         : payload.coverImagePath;
 
-      await removeManagedFile(existingProperty.image);
+      await removeManagedFile(
+        existingProperty.coverImageOriginal || existingProperty.image,
+      );
       await Property.updateCoverImage(propertyId, nextCoverImage);
     }
 
@@ -449,7 +531,9 @@ exports.updatePropertyByAdmin = async (req, res) => {
           )
         : payload.coverImagePath;
 
-      await removeManagedFile(existingProperty.image);
+      await removeManagedFile(
+        existingProperty.coverImageOriginal || existingProperty.image,
+      );
       await Property.updateCoverImage(propertyId, nextCoverImage);
     }
 

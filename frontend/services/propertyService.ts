@@ -1,5 +1,24 @@
 import { apiRequest, buildAssetUrl } from "@/lib/apiClient";
 
+export interface PropertyQueryFilters {
+  location?: string;
+  type?: string;
+  guests?: number;
+  checkIn?: string;
+  checkOut?: string;
+}
+
+export interface PropertyAvailabilityResult {
+  available: boolean;
+  message: string;
+}
+
+export interface PropertyUnavailableDateRange {
+  checkIn: string;
+  checkOut: string;
+  status: string;
+}
+
 export interface PropertySummary {
   id: number;
   hostId: number;
@@ -32,6 +51,8 @@ export interface PropertyReview {
 export interface PropertyDetail extends PropertySummary {
   address: string;
   images: string[];
+  originalImages?: string[];
+  coverImageOriginal?: string;
   amenities: string[];
   reviewCount: number;
 }
@@ -64,10 +85,19 @@ function normalizePropertyDetail(property: any): PropertyDetail {
 
   return {
     ...summary,
+    image: buildAssetUrl(
+      property.displayImage || property.image || property.cover_image,
+    ),
     address: property.address || property.street_address || "",
-    images: (property.images || [])
+    images: (property.displayImages || property.images || [])
       .map((image: string) => buildAssetUrl(image))
       .filter(Boolean),
+    originalImages: (property.originalImages || property.images || [])
+      .map((image: string) => buildAssetUrl(image))
+      .filter(Boolean),
+    coverImageOriginal: buildAssetUrl(
+      property.coverImageOriginal || property.cover_image || "",
+    ),
     amenities: property.amenities || [],
     reviewCount: Number(property.reviewCount || 0),
     reviews:
@@ -77,8 +107,36 @@ function normalizePropertyDetail(property: any): PropertyDetail {
   };
 }
 
-export async function getProperties() {
-  const data = await apiRequest<any[]>("/api/properties");
+function buildPropertyQueryString(filters: PropertyQueryFilters = {}) {
+  const params = new URLSearchParams();
+
+  if (filters.location?.trim()) {
+    params.set("location", filters.location.trim());
+  }
+
+  if (filters.type?.trim()) {
+    params.set("type", filters.type.trim());
+  }
+
+  if (Number.isFinite(filters.guests) && Number(filters.guests) > 0) {
+    params.set("guests", String(filters.guests));
+  }
+
+  if (filters.checkIn?.trim()) {
+    params.set("checkIn", filters.checkIn.trim());
+  }
+
+  if (filters.checkOut?.trim()) {
+    params.set("checkOut", filters.checkOut.trim());
+  }
+
+  const queryString = params.toString();
+  return queryString ? `?${queryString}` : "";
+}
+
+export async function getProperties(filters: PropertyQueryFilters = {}) {
+  const queryString = buildPropertyQueryString(filters);
+  const data = await apiRequest<any[]>(`/api/properties${queryString}`);
   return data.map(normalizePropertySummary);
 }
 
@@ -98,6 +156,37 @@ export async function getPropertyById(id: string | number) {
       }),
     ),
   };
+}
+
+export async function getPropertyAvailability(
+  id: string | number,
+  filters: { checkIn: string; checkOut: string },
+) {
+  const params = new URLSearchParams({
+    checkIn: filters.checkIn,
+    checkOut: filters.checkOut,
+  });
+
+  const data = await apiRequest<PropertyAvailabilityResult>(
+    `/api/properties/${id}/availability?${params.toString()}`,
+  );
+
+  return {
+    available: Boolean(data.available),
+    message: String(data.message || ""),
+  };
+}
+
+export async function getPropertyUnavailableDates(id: string | number) {
+  const data = await apiRequest<{ ranges: PropertyUnavailableDateRange[] }>(
+    `/api/properties/${id}/unavailable-dates`,
+  );
+
+  return (data.ranges || []).map((range) => ({
+    checkIn: String(range.checkIn || ""),
+    checkOut: String(range.checkOut || ""),
+    status: String(range.status || ""),
+  }));
 }
 
 export async function getAdminProperties() {

@@ -12,6 +12,7 @@ interface PaymentInstructionsCardProps {
   uploadError?: string;
   uploadSuccess?: string;
   onUpload?: (file: File) => void;
+  qrMaxWidth?: number;
 }
 
 export function PaymentInstructionsCard({
@@ -21,11 +22,15 @@ export function PaymentInstructionsCard({
   uploadError,
   uploadSuccess,
   onUpload,
+  qrMaxWidth = 210,
 }: PaymentInstructionsCardProps) {
   const inputId = useId();
   const canUpload =
     booking.status === "pending" &&
     ["unpaid", "rejected", "proof_uploaded"].includes(booking.paymentStatus);
+  const amountUsd = booking.paymentInfo.amountUsd || booking.paymentInfo.amount || 0;
+  const amountVnd = booking.paymentInfo.amountVnd || 0;
+  const exchangeRate = booking.paymentInfo.exchangeRate || 0;
 
   const accountNumberDisplay = booking.paymentInfo.accountNumber.replace(
     /(\d{4})(?=\d)/g,
@@ -73,7 +78,8 @@ export function PaymentInstructionsCard({
             </h3>
           </div>
           <p style={{ margin: 0, color: "#64748b", fontSize: "0.86rem" }}>
-            Transfer the exact amount and keep the transfer content unchanged.
+            Scan the QR to auto-fill the transfer amount and content whenever
+            your banking app supports VietQR.
           </p>
           <p
             style={{
@@ -103,7 +109,9 @@ export function PaymentInstructionsCard({
               ["Bank", booking.paymentInfo.bankName],
               ["Account number", accountNumberDisplay],
               ["Account name", booking.paymentInfo.accountName],
-              ["Amount", `$${booking.paymentInfo.amount.toFixed(2)}`],
+              ["Booking total", `$${amountUsd.toFixed(2)}`],
+              ["Transfer amount", `${amountVnd.toLocaleString("vi-VN")} VND`],
+              ["Exchange rate", `1 USD = ${exchangeRate.toLocaleString("vi-VN")} VND`],
               ["Transfer content", booking.paymentInfo.transferContent],
             ].map(([label, value]) => (
               <div
@@ -149,11 +157,11 @@ export function PaymentInstructionsCard({
               border: "1px solid #e2e8f0",
               borderRadius: 14,
               padding: "16px",
-              background: "#fff",
-              textAlign: "center",
-              height: "100%",
-            }}
-          >
+                background: "#fff",
+                textAlign: "center",
+                height: "100%",
+              }}
+            >
             <div
               style={{
                 fontSize: "0.78rem",
@@ -171,7 +179,7 @@ export function PaymentInstructionsCard({
               alt="Payment QR"
               style={{
                 width: "100%",
-                maxWidth: 210,
+                maxWidth: qrMaxWidth,
                 aspectRatio: "1 / 1",
                 objectFit: "contain",
                 borderRadius: 12,
@@ -180,6 +188,17 @@ export function PaymentInstructionsCard({
                 background: "#fff",
               }}
             />
+            <div
+              style={{
+                marginTop: 10,
+                fontSize: "0.76rem",
+                color: "#64748b",
+                lineHeight: 1.6,
+              }}
+            >
+              The QR is generated with the exact VND amount and transfer
+              content to reduce manual mistakes.
+            </div>
           </div>
         </div>
       </div>

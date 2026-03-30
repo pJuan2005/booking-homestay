@@ -1,8 +1,10 @@
 "use client";
 
+import Image from "next/image";
 import { useEffect, useMemo, useState } from "react";
 import { CalendarDays, Filter, MessageCircle, Search } from "lucide-react";
 import { BookingChatDialog } from "@/components/shared/BookingChatDialog";
+import { PaginationControls } from "@/components/shared/PaginationControls";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { PaymentStatusBadge } from "@/components/shared/PaymentStatusBadge";
 import { BookingReviewDialog } from "@/components/shared/BookingReviewDialog";
@@ -11,6 +13,7 @@ import {
   reviewHostBooking,
   type BookingRecord,
 } from "@/services/bookingService";
+import { isBackendUploadImage } from "@/lib/image";
 
 export default function HostBookingsPage() {
   const [bookings, setBookings] = useState<BookingRecord[]>([]);
@@ -22,6 +25,8 @@ export default function HostBookingsPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = 8;
 
   async function loadBookings() {
     setIsLoading(true);
@@ -62,12 +67,26 @@ export default function HostBookingsPage() {
     [bookings, filter, search],
   );
 
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [filter, search]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredBookings.length / pageSize));
+  const paginatedBookings = useMemo(() => {
+    const startIndex = (currentPage - 1) * pageSize;
+    return filteredBookings.slice(startIndex, startIndex + pageSize);
+  }, [currentPage, filteredBookings]);
+
   const summary = [
     { label: "Total", value: bookings.length, color: "#2563EB", bg: "#eff6ff" },
     { label: "Confirmed", value: bookings.filter((booking) => booking.status === "confirmed").length, color: "#16a34a", bg: "#dcfce7" },
     { label: "Pending", value: bookings.filter((booking) => booking.status === "pending").length, color: "#d97706", bg: "#fef3c7" },
     { label: "Proof Uploaded", value: bookings.filter((booking) => booking.paymentStatus === "proof_uploaded").length, color: "#7c3aed", bg: "#f3e8ff" },
   ];
+
+  function canReviewBooking(booking: BookingRecord) {
+    return booking.status === "pending" && booking.paymentStatus === "proof_uploaded";
+  }
 
   async function handleReview(payload: {
     decision: "approve" | "reject";
@@ -174,11 +193,19 @@ export default function HostBookingsPage() {
                   </td>
                 </tr>
               ) : (
-                filteredBookings.map((booking) => (
+                paginatedBookings.map((booking) => (
                   <tr key={booking.id}>
                     <td>
                       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                        <img src={booking.propertyImage} alt={booking.propertyTitle} style={{ width: 42, height: 42, borderRadius: 10, objectFit: "cover", flexShrink: 0 }} />
+                        <Image
+                          src={booking.propertyImage}
+                          alt={booking.propertyTitle}
+                          width={42}
+                          height={42}
+                          sizes="42px"
+                          unoptimized={isBackendUploadImage(booking.propertyImage)}
+                          style={{ width: 42, height: 42, borderRadius: 10, objectFit: "cover", flexShrink: 0 }}
+                        />
                         <div>
                           <div style={{ fontWeight: 700, color: "#1e293b", fontSize: "0.88rem" }}>{booking.propertyTitle}</div>
                           <div style={{ color: "#94a3b8", fontSize: "0.75rem" }}>{booking.bookingCode}</div>
@@ -205,9 +232,11 @@ export default function HostBookingsPage() {
                     <td><PaymentStatusBadge status={booking.paymentStatus} /></td>
                     <td>
                       <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                        <button onClick={() => { setSelectedBooking(booking); setError(""); setMessage(""); }} style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "6px 10px", borderRadius: 8, border: "1.5px solid #e2e8f0", background: "#fff", color: "#475569", fontSize: "0.8rem", fontWeight: 600, cursor: "pointer" }}>
-                          Review
-                        </button>
+                        {canReviewBooking(booking) && (
+                          <button onClick={() => { setSelectedBooking(booking); setError(""); setMessage(""); }} style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "6px 10px", borderRadius: 8, border: "1.5px solid #e2e8f0", background: "#fff", color: "#475569", fontSize: "0.8rem", fontWeight: 600, cursor: "pointer" }}>
+                            Review
+                          </button>
+                        )}
                         {booking.status === "confirmed" && (
                           <button
                             type="button"
@@ -239,6 +268,15 @@ export default function HostBookingsPage() {
           </table>
         </div>
       </div>
+
+      <PaginationControls
+        currentPage={currentPage}
+        totalPages={totalPages}
+        onPageChange={setCurrentPage}
+        itemLabel="bookings"
+        totalItems={filteredBookings.length}
+        pageSize={pageSize}
+      />
 
       <BookingReviewDialog
         booking={selectedBooking}

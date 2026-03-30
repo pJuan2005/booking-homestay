@@ -1,5 +1,6 @@
 ﻿"use client";
 
+import Image from "next/image";
 import { useEffect, useMemo, useState } from "react";
 import { Edit2, Eye, Filter, MapPin, Search, Star, Trash2 } from "lucide-react";
 import Link from "next/link";
@@ -10,6 +11,7 @@ import {
 } from "@/services/propertyService";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { PaginationControls } from "@/components/shared/PaginationControls";
+import { isBackendUploadImage } from "@/lib/image";
 
 const STATUS_OPTIONS = ["all", "approved", "pending", "rejected"] as const;
 const ITEMS_PER_PAGE = 8;
@@ -282,11 +284,13 @@ export default function ManagePropertiesPage() {
                   <tr key={property.id}>
                     <td>
                       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                        <img
+                        <Image
                           src={property.image}
                           alt={property.title}
-                          loading="lazy"
-                          decoding="async"
+                          width={46}
+                          height={46}
+                          sizes="46px"
+                          unoptimized={isBackendUploadImage(property.image)}
                           style={{
                             width: 46,
                             height: 46,

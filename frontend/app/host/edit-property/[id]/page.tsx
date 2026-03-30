@@ -66,7 +66,7 @@ export default function HostEditPropertyPage() {
         const data = await getHostPropertyById(propertyId, hostId);
         setProperty(data);
         setForm(createPropertyFormFromDetail(data));
-        setExistingDetailImages(data.images || []);
+        setExistingDetailImages(data.originalImages || data.images || []);
       } catch (error) {
         setGeneralError(
           error instanceof Error
@@ -165,7 +165,7 @@ export default function HostEditPropertyPage() {
 
       setProperty(data);
       setForm(createPropertyFormFromDetail(data));
-      setExistingDetailImages(data.images || []);
+      setExistingDetailImages(data.originalImages || data.images || []);
       setRemovedDetailImages([]);
       setDetailImages([]);
       setCoverImage(null);

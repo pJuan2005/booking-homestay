@@ -1,4 +1,4 @@
-import Link from "next/link";
+﻿import Link from "next/link";
 import {
   Facebook,
   Home,
@@ -11,10 +11,14 @@ import {
 } from "lucide-react";
 
 const socialLinks = [
-  { icon: <Twitter size={16} />, href: "#", label: "Twitter" },
-  { icon: <Facebook size={16} />, href: "#", label: "Facebook" },
-  { icon: <Instagram size={16} />, href: "#", label: "Instagram" },
-  { icon: <Youtube size={16} />, href: "#", label: "Youtube" },
+  {
+    icon: <Facebook size={16} />,
+    href: "https://www.facebook.com/pham.chuan.915459/",
+    label: "Facebook",
+  },
+  { icon: <Instagram size={16} />, href: "#!", label: "Instagram" },
+  { icon: <Twitter size={16} />, href: "#!", label: "Twitter" },
+  { icon: <Youtube size={16} />, href: "#!", label: "Youtube" },
 ];
 
 export function Footer() {
@@ -61,21 +65,23 @@ export function Footer() {
                 lineHeight: 1.75,
                 color: "#94a3b8",
                 marginBottom: 20,
-                maxWidth: 300,
+                maxWidth: 320,
               }}
             >
-              Find your perfect home away from home. We connect travelers with
-              unique, comfortable homestays around the world.
+              Find your ideal stay with a booking flow designed for real trips,
+              trusted communication, and a smoother hosting experience.
             </p>
-            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <div className="hs-footer-socials">
               {socialLinks.map((item) => (
                 <a
                   key={item.label}
                   href={item.href}
                   className="hs-social-btn"
                   aria-label={item.label}
+                  target={item.href.startsWith("http") ? "_blank" : undefined}
+                  rel={item.href.startsWith("http") ? "noreferrer" : undefined}
                 >
-                  {item.icon}
+                  <span className="hs-social-icon">{item.icon}</span>
                 </a>
               ))}
             </div>
@@ -87,25 +93,25 @@ export function Footer() {
             <Link href="/listings">Explore Stays</Link>
             <Link href="/about">About Us</Link>
             <Link href="/contact">Contact</Link>
-            <a href="#">How It Works</a>
+            <a href="#!">How It Works</a>
           </div>
 
           <div className="col-lg-2 col-md-6 col-6">
             <h5>Hosting</h5>
             <Link href="/auth/register">Become a Host</Link>
             <Link href="/auth/login">Host Login</Link>
-            <a href="#">Host Guidelines</a>
-            <a href="#">Pricing Plans</a>
-            <a href="#">Success Stories</a>
+            <a href="#!">Hosting Guide</a>
+            <a href="#!">Policies</a>
+            <a href="#!">Community</a>
           </div>
 
           <div className="col-lg-2 col-md-6 col-6">
             <h5>Support</h5>
-            <a href="#">Help Center</a>
-            <a href="#">Safety</a>
-            <a href="#">Privacy Policy</a>
-            <a href="#">Terms of Service</a>
-            <a href="#">Cookie Policy</a>
+            <a href="#!">Help Center</a>
+            <a href="#!">Safety</a>
+            <a href="#!">Privacy Policy</a>
+            <a href="#!">Terms of Service</a>
+            <a href="#!">Cookie Policy</a>
           </div>
 
           <div className="col-lg-2 col-md-6 col-6">
@@ -123,21 +129,24 @@ export function Footer() {
                     color: "#94a3b8",
                   }}
                 >
-                  123 Stay Ave,
+                  Bình Giang,
                   <br />
-                  San Francisco, CA
+                  Hải Phòng, Việt Nam
                 </span>
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                 <Mail size={14} style={{ color: "#2563EB", flexShrink: 0 }} />
-                <a href="mailto:hello@homestay.com" style={{ fontSize: "0.87rem" }}>
-                  hello@homestay.com
+                <a
+                  href="mailto:phamchuan2608@gmail.com"
+                  style={{ fontSize: "0.87rem" }}
+                >
+                  phamchuan2608@gmail.com
                 </a>
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                 <Phone size={14} style={{ color: "#2563EB", flexShrink: 0 }} />
-                <a href="tel:+14155550123" style={{ fontSize: "0.87rem" }}>
-                  +1 (415) 555-0123
+                <a href="tel:0362111527" style={{ fontSize: "0.87rem" }}>
+                  0362111527
                 </a>
               </div>
             </div>
@@ -159,13 +168,13 @@ export function Footer() {
             © 2026 HomeStay. All rights reserved.
           </p>
           <div style={{ display: "flex", gap: 16 }}>
-            <a href="#" style={{ fontSize: "0.83rem", color: "#64748b" }}>
+            <a href="#!" style={{ fontSize: "0.83rem", color: "#64748b" }}>
               Privacy
             </a>
-            <a href="#" style={{ fontSize: "0.83rem", color: "#64748b" }}>
+            <a href="#!" style={{ fontSize: "0.83rem", color: "#64748b" }}>
               Terms
             </a>
-            <a href="#" style={{ fontSize: "0.83rem", color: "#64748b" }}>
+            <a href="#!" style={{ fontSize: "0.83rem", color: "#64748b" }}>
               Cookies
             </a>
           </div>
@@ -174,3 +183,4 @@ export function Footer() {
     </footer>
   );
 }
+

@@ -32,6 +32,9 @@ export function BookingReviewDialog({
   const [hostNote, setHostNote] = useState("");
   const [checkinInstructions, setCheckinInstructions] = useState("");
   const [rejectionReason, setRejectionReason] = useState("");
+  const isReviewable =
+    booking?.status === "pending" && booking?.paymentStatus === "proof_uploaded";
+  const amountInVnd = booking?.paymentInfo?.amountVnd || 0;
 
   useEffect(() => {
     if (!booking) {
@@ -103,11 +106,20 @@ export function BookingReviewDialog({
               {title}
             </h3>
             <p style={{ margin: 0, color: "#64748b", fontSize: "0.86rem" }}>
-              Review booking <strong>{booking.bookingCode}</strong> before
-              updating the payment result.
+              {isReviewable ? (
+                <>
+                  Review booking <strong>{booking.bookingCode}</strong> before
+                  updating the payment result.
+                </>
+              ) : (
+                <>
+                  Booking <strong>{booking.bookingCode}</strong> has already
+                  been processed and can no longer be edited.
+                </>
+              )}
             </p>
           </div>
-          <button className="btn-outline-hs" onClick={onClose}>
+          <button type="button" className="btn-outline-hs" onClick={onClose}>
             Close
           </button>
         </div>
@@ -200,7 +212,16 @@ export function BookingReviewDialog({
                   {booking.checkIn} to {booking.checkOut} • {booking.nights} nights
                 </div>
                 <div style={{ color: "#475569" }}>
-                  Amount: <strong style={{ color: "#1e293b" }}>${booking.totalPrice.toFixed(2)}</strong>
+                  Booking total:{" "}
+                  <strong style={{ color: "#1e293b" }}>
+                    ${booking.totalPrice.toFixed(2)}
+                  </strong>
+                </div>
+                <div style={{ color: "#475569" }}>
+                  Transfer amount:{" "}
+                  <strong style={{ color: "#1e293b" }}>
+                    {amountInVnd.toLocaleString("vi-VN")} VND
+                  </strong>
                 </div>
                 <div style={{ color: "#475569" }}>
                   Transfer content:{" "}
@@ -262,72 +283,154 @@ export function BookingReviewDialog({
               )}
             </div>
 
-            <div className="row g-3">
-              <div className="col-12">
-                <label className="hs-form-label">Decision</label>
-                <select
-                  className="hs-form-control"
-                  value={decision}
-                  onChange={(event) =>
-                    handleDecisionChange(
-                      event.target.value as "approve" | "reject",
-                    )
-                  }
-                >
-                  <option value="approve">Approve and confirm booking</option>
-                  <option value="reject">Reject payment proof</option>
-                </select>
-              </div>
-              <div className="col-12">
-                <label className="hs-form-label">Host note</label>
-                <textarea
-                  className="hs-form-control"
-                  rows={3}
-                  value={hostNote}
-                  onChange={(event) => setHostNote(event.target.value)}
-                  placeholder="Add a note for the guest..."
-                />
-              </div>
-              {decision === "approve" && (
+            {isReviewable ? (
+              <div className="row g-3">
                 <div className="col-12">
-                  <label className="hs-form-label">Check-in instructions</label>
-                  <textarea
+                  <label className="hs-form-label">Decision</label>
+                  <select
                     className="hs-form-control"
-                    rows={3}
-                    value={checkinInstructions}
+                    value={decision}
                     onChange={(event) =>
-                      setCheckinInstructions(event.target.value)
+                      handleDecisionChange(
+                        event.target.value as "approve" | "reject",
+                      )
                     }
-                    placeholder="Share the check-in process, key handover, door code..."
-                  />
+                  >
+                    <option value="approve">Approve and confirm booking</option>
+                    <option value="reject">Reject payment proof</option>
+                  </select>
                 </div>
-              )}
-              {decision === "reject" && (
                 <div className="col-12">
-                  <label className="hs-form-label">Rejection reason</label>
+                  <label className="hs-form-label">Host note</label>
                   <textarea
                     className="hs-form-control"
                     rows={3}
-                    value={rejectionReason}
-                    onChange={(event) => setRejectionReason(event.target.value)}
-                    placeholder="Explain why the payment proof is rejected..."
+                    value={hostNote}
+                    onChange={(event) => setHostNote(event.target.value)}
+                    placeholder="Add a note for the guest..."
                   />
                 </div>
-              )}
-            </div>
+                {decision === "approve" && (
+                  <div className="col-12">
+                    <label className="hs-form-label">Check-in instructions</label>
+                    <textarea
+                      className="hs-form-control"
+                      rows={3}
+                      value={checkinInstructions}
+                      onChange={(event) =>
+                        setCheckinInstructions(event.target.value)
+                      }
+                      placeholder="Share the check-in process, key handover, door code..."
+                    />
+                  </div>
+                )}
+                {decision === "reject" && (
+                  <div className="col-12">
+                    <label className="hs-form-label">Rejection reason</label>
+                    <textarea
+                      className="hs-form-control"
+                      rows={3}
+                      value={rejectionReason}
+                      onChange={(event) => setRejectionReason(event.target.value)}
+                      placeholder="Explain why the payment proof is rejected..."
+                    />
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div
+                style={{
+                  display: "grid",
+                  gap: 12,
+                  border: "1px solid #e2e8f0",
+                  borderRadius: 16,
+                  padding: 18,
+                  background: "#f8fafc",
+                }}
+              >
+                {booking.confirmedAt && (
+                  <div style={{ color: "#475569", fontSize: "0.84rem" }}>
+                    Processed at{" "}
+                    <strong style={{ color: "#1e293b" }}>
+                      {new Date(booking.confirmedAt).toLocaleString("en-GB")}
+                    </strong>
+                  </div>
+                )}
+                {booking.confirmedByName && (
+                  <div style={{ color: "#475569", fontSize: "0.84rem" }}>
+                    Reviewed by{" "}
+                    <strong style={{ color: "#1e293b" }}>
+                      {booking.confirmedByName}
+                    </strong>
+                  </div>
+                )}
+                {booking.hostNote && (
+                  <div>
+                    <div className="hs-form-label">Host note</div>
+                    <div
+                      style={{
+                        border: "1px solid #e2e8f0",
+                        borderRadius: 12,
+                        padding: "12px 14px",
+                        background: "#fff",
+                        color: "#475569",
+                        fontSize: "0.84rem",
+                        whiteSpace: "pre-wrap",
+                      }}
+                    >
+                      {booking.hostNote}
+                    </div>
+                  </div>
+                )}
+                {booking.checkinInstructions && (
+                  <div>
+                    <div className="hs-form-label">Check-in instructions</div>
+                    <div
+                      style={{
+                        border: "1px solid #e2e8f0",
+                        borderRadius: 12,
+                        padding: "12px 14px",
+                        background: "#fff",
+                        color: "#475569",
+                        fontSize: "0.84rem",
+                        whiteSpace: "pre-wrap",
+                      }}
+                    >
+                      {booking.checkinInstructions}
+                    </div>
+                  </div>
+                )}
+                {booking.rejectionReason && (
+                  <div>
+                    <div className="hs-form-label">Rejection reason</div>
+                    <div
+                      style={{
+                        border: "1px solid #fecaca",
+                        borderRadius: 12,
+                        padding: "12px 14px",
+                        background: "#fef2f2",
+                        color: "#b91c1c",
+                        fontSize: "0.84rem",
+                        whiteSpace: "pre-wrap",
+                      }}
+                    >
+                      {booking.rejectionReason}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
 
-            <div
-              style={{
-                display: "flex",
-                gap: 10,
-                justifyContent: "flex-end",
-                marginTop: 18,
-                flexWrap: "wrap",
-              }}
-            >
-              <button className="btn-outline-hs" onClick={onClose}>
-                Cancel
-              </button>
+            {isReviewable && (
+              <div
+                style={{
+                  display: "flex",
+                  gap: 10,
+                  justifyContent: "flex-end",
+                  marginTop: 18,
+                  flexWrap: "wrap",
+                }}
+              >
               <button
                 className="btn-primary-hs"
                 disabled={isSubmitting}
@@ -343,7 +446,8 @@ export function BookingReviewDialog({
               >
                 {isSubmitting ? "Saving..." : submitLabel}
               </button>
-            </div>
+              </div>
+            )}
           </div>
         </div>
       </div>

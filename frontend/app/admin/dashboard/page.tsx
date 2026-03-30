@@ -80,6 +80,10 @@ export default function AdminDashboardPage() {
     pendingBookings: 0,
     cancelledBookings: 0,
     totalRevenue: 0,
+    grossRevenue: 0,
+    platformRevenue: 0,
+    hostPayoutTotal: 0,
+    platformCommissionRate: 0.1,
   };
   const monthlyPerformance = dashboard?.monthlyPerformance || [];
   const recentBookings = dashboard?.recentBookings || [];
@@ -112,9 +116,9 @@ export default function AdminDashboardPage() {
     {
       icon: <DollarSign size={22} color="#d97706" />,
       bg: "#fef3c7",
-      label: "Revenue",
-      value: formatCurrency(summary.totalRevenue),
-      sub: "Confirmed bookings only",
+      label: "Gross Revenue",
+      value: formatCurrency(summary.grossRevenue || summary.totalRevenue),
+      sub: `Platform profit ${formatCurrency(summary.platformRevenue)} · Host payouts ${formatCurrency(summary.hostPayoutTotal)}`,
       link: "/admin/manage-reports",
     },
   ];
@@ -334,6 +338,16 @@ export default function AdminDashboardPage() {
                   icon: <Clock size={16} color="#d97706" />,
                 },
                 {
+                  label: "Platform Profit",
+                  value: formatCurrency(summary.platformRevenue),
+                  icon: <DollarSign size={16} color="#d97706" />,
+                },
+                {
+                  label: "Host Payouts",
+                  value: formatCurrency(summary.hostPayoutTotal),
+                  icon: <TrendingUp size={16} color="#7c3aed" />,
+                },
+                {
                   label: "Active Users",
                   value: summary.activeUsers,
                   icon: <Users size={16} color="#7c3aed" />,
@@ -351,7 +365,7 @@ export default function AdminDashboardPage() {
                     justifyContent: "space-between",
                     alignItems: "center",
                     padding: "12px 0",
-                    borderBottom: index < 4 ? "1px solid #f8fafc" : "none",
+                    borderBottom: index < 6 ? "1px solid #f8fafc" : "none",
                   }}
                 >
                   <div

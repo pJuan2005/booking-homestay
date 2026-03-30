@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
@@ -14,6 +15,7 @@ import {
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { PaginationControls } from "@/components/shared/PaginationControls";
 import { useAuth } from "@/components/context/AuthContext";
+import { isBackendUploadImage } from "@/lib/image";
 import {
   deleteHostProperty,
   getHostProperties,
@@ -254,11 +256,13 @@ export default function MyPropertiesPage() {
                 </div>
 
                 <div style={{ overflow: "hidden" }}>
-                  <img
+                  <Image
                     src={property.image}
                     alt={property.title}
-                    loading="lazy"
-                    decoding="async"
+                    width={720}
+                    height={456}
+                    sizes="(max-width: 992px) 100vw, (max-width: 1400px) 50vw, 33vw"
+                    unoptimized={isBackendUploadImage(property.image)}
                     style={{ width: "100%", height: 190, objectFit: "cover" }}
                   />
                 </div>

@@ -7,6 +7,10 @@ export interface BookingPaymentInfo {
   accountNumber: string;
   accountName: string;
   amount: number;
+  amountUsd: number;
+  amountVnd: number;
+  exchangeRate: number;
+  currency: string;
   transferContent: string;
   qrImageUrl: string;
 }
@@ -97,6 +101,10 @@ function mapBooking(record: any): BookingRecord {
       accountNumber: String(record.paymentInfo?.accountNumber || ""),
       accountName: String(record.paymentInfo?.accountName || ""),
       amount: Number(record.paymentInfo?.amount || 0),
+      amountUsd: Number(record.paymentInfo?.amountUsd || record.paymentInfo?.amount || 0),
+      amountVnd: Number(record.paymentInfo?.amountVnd || 0),
+      exchangeRate: Number(record.paymentInfo?.exchangeRate || 0),
+      currency: String(record.paymentInfo?.currency || "VND"),
       transferContent: String(record.paymentInfo?.transferContent || ""),
       qrImageUrl: String(record.paymentInfo?.qrImageUrl || ""),
     },

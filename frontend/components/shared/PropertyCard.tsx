@@ -1,5 +1,7 @@
+import Image from "next/image";
 import Link from "next/link";
 import { MapPin, Star, Users, Bed } from "lucide-react";
+import { isBackendUploadImage } from "@/lib/image";
 
 interface Property {
   id: number;
@@ -25,13 +27,15 @@ export function PropertyCard({ property }: PropertyCardProps) {
         className="hs-card hs-property-card"
         style={{ cursor: "pointer", height: "100%" }}
       >
-        <div style={{ overflow: "hidden" }}>
-          <img
+        <div style={{ overflow: "hidden", position: "relative", aspectRatio: "16 / 10" }}>
+          <Image
             src={property.image}
             alt={property.title}
             className="hs-property-img"
-            loading="lazy"
-            decoding="async"
+            fill
+            sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+            unoptimized={isBackendUploadImage(property.image)}
+            style={{ objectFit: "cover" }}
           />
         </div>
 

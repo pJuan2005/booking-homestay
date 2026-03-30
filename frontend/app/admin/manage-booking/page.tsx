@@ -1,16 +1,21 @@
 "use client";
 
+import Image from "next/image";
 import { useEffect, useMemo, useState } from "react";
 import { Filter, MessageCircle, Search } from "lucide-react";
 import { BookingChatDialog } from "@/components/shared/BookingChatDialog";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { PaymentStatusBadge } from "@/components/shared/PaymentStatusBadge";
 import { BookingReviewDialog } from "@/components/shared/BookingReviewDialog";
+import { PaginationControls } from "@/components/shared/PaginationControls";
 import {
   getAdminBookings,
   reviewAdminBooking,
   type BookingRecord,
 } from "@/services/bookingService";
+import { isBackendUploadImage } from "@/lib/image";
+
+const ITEMS_PER_PAGE = 8;
 
 export default function ManageBookingsPage() {
   const [bookings, setBookings] = useState<BookingRecord[]>([]);
@@ -22,6 +27,7 @@ export default function ManageBookingsPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
 
   async function loadBookings() {
     setIsLoading(true);
@@ -63,6 +69,17 @@ export default function ManageBookingsPage() {
     [bookings, search, statusFilter],
   );
 
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [search, statusFilter]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredBookings.length / ITEMS_PER_PAGE));
+  const safeCurrentPage = Math.min(currentPage, totalPages);
+  const paginatedBookings = filteredBookings.slice(
+    (safeCurrentPage - 1) * ITEMS_PER_PAGE,
+    safeCurrentPage * ITEMS_PER_PAGE,
+  );
+
   const summary = [
     { label: "Total Bookings", value: bookings.length, color: "#2563EB", bg: "#eff6ff" },
     { label: "Confirmed", value: bookings.filter((booking) => booking.status === "confirmed").length, color: "#16a34a", bg: "#dcfce7" },
@@ -73,6 +90,10 @@ export default function ManageBookingsPage() {
   const totalRevenue = bookings
     .filter((booking) => booking.status === "confirmed")
     .reduce((sum, booking) => sum + booking.totalPrice, 0);
+
+  function canReviewBooking(booking: BookingRecord) {
+    return booking.status === "pending" && booking.paymentStatus === "proof_uploaded";
+  }
 
   async function handleReview(payload: {
     decision: "approve" | "reject";
@@ -151,7 +172,7 @@ export default function ManageBookingsPage() {
             </div>
           </div>
           <div style={{ color: "#64748b", fontSize: "0.84rem" }}>
-            Revenue here is based on confirmed bookings only.
+            Gross booking revenue is based on confirmed bookings only.
           </div>
         </div>
       </div>
@@ -203,7 +224,7 @@ export default function ManageBookingsPage() {
                   </td>
                 </tr>
               ) : (
-                filteredBookings.map((booking) => (
+                paginatedBookings.map((booking) => (
                   <tr key={booking.id}>
                     <td>
                       <div style={{ fontWeight: 700, color: "#2563EB", fontSize: "0.87rem" }}>
@@ -220,7 +241,15 @@ export default function ManageBookingsPage() {
                     <td style={{ fontSize: "0.85rem", color: "#475569" }}>{booking.hostName}</td>
                     <td>
                       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                        <img src={booking.propertyImage} alt={booking.propertyTitle} style={{ width: 40, height: 40, borderRadius: 10, objectFit: "cover", flexShrink: 0 }} />
+                        <Image
+                          src={booking.propertyImage}
+                          alt={booking.propertyTitle}
+                          width={40}
+                          height={40}
+                          sizes="40px"
+                          unoptimized={isBackendUploadImage(booking.propertyImage)}
+                          style={{ width: 40, height: 40, borderRadius: 10, objectFit: "cover", flexShrink: 0 }}
+                        />
                         <span style={{ fontSize: "0.85rem", color: "#475569", maxWidth: 160, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                           {booking.propertyTitle}
                         </span>
@@ -231,9 +260,11 @@ export default function ManageBookingsPage() {
                     <td><PaymentStatusBadge status={booking.paymentStatus} /></td>
                     <td>
                       <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                        <button onClick={() => { setSelectedBooking(booking); setError(""); setMessage(""); }} style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "6px 10px", borderRadius: 7, border: "1.5px solid #e2e8f0", background: "#fff", color: "#64748b", fontSize: "0.8rem", fontWeight: 600, cursor: "pointer" }}>
-                          Review
-                        </button>
+                        {canReviewBooking(booking) && (
+                          <button onClick={() => { setSelectedBooking(booking); setError(""); setMessage(""); }} style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "6px 10px", borderRadius: 7, border: "1.5px solid #e2e8f0", background: "#fff", color: "#64748b", fontSize: "0.8rem", fontWeight: 600, cursor: "pointer" }}>
+                            Review
+                          </button>
+                        )}
                         {booking.status === "confirmed" && (
                           <button
                             type="button"
@@ -263,6 +294,17 @@ export default function ManageBookingsPage() {
               )}
             </tbody>
           </table>
+        </div>
+
+        <div style={{ padding: "0 20px 20px" }}>
+          <PaginationControls
+            currentPage={safeCurrentPage}
+            totalPages={totalPages}
+            totalItems={filteredBookings.length}
+            pageSize={ITEMS_PER_PAGE}
+            itemLabel="bookings"
+            onPageChange={setCurrentPage}
+          />
         </div>
       </div>
 

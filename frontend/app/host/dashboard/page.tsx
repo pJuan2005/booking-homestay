@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import {
@@ -16,6 +17,7 @@ import {
   getHostDashboard,
   type HostDashboardData,
 } from "@/services/dashboardService";
+import { isBackendUploadImage } from "@/lib/image";
 
 function formatCurrency(value: number) {
   return `$${value.toLocaleString()}`;
@@ -78,7 +80,10 @@ export default function HostDashboardPage() {
     reviewCount: 0,
     propertiesThisMonth: 0,
     bookingsThisWeek: 0,
+    grossRevenue: 0,
     totalRevenue: 0,
+    platformFeeAmount: 0,
+    platformCommissionRate: 0.1,
     averageRating: 0,
   };
 
@@ -100,9 +105,9 @@ export default function HostDashboardPage() {
     {
       icon: <DollarSign size={22} color="#d97706" />,
       bg: "#fef3c7",
-      label: "Total Revenue",
+      label: "Host Payout",
       value: formatCurrency(summary.totalRevenue),
-      change: "Confirmed bookings only",
+      change: `Gross ${formatCurrency(summary.grossRevenue)} · Platform fee ${formatCurrency(summary.platformFeeAmount)}`,
     },
     {
       icon: <TrendingUp size={22} color="#7c3aed" />,
@@ -387,11 +392,13 @@ export default function HostDashboardPage() {
                       gap: 10,
                     }}
                   >
-                    <img
+                    <Image
                       src={property.image}
                       alt={property.title}
-                      loading="lazy"
-                      decoding="async"
+                      width={46}
+                      height={46}
+                      sizes="46px"
+                      unoptimized={isBackendUploadImage(property.image)}
                       style={{
                         width: 46,
                         height: 46,

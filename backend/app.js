@@ -50,7 +50,21 @@ app.use(
 );
 app.use(loadUser);
 
-app.use("/uploads", express.static(path.join(__dirname, "uploads")));
+app.use(
+  "/uploads",
+  express.static(path.join(__dirname, "uploads"), {
+    maxAge: "30d",
+    immutable: true,
+    setHeaders(res, filePath) {
+      if (/-thumb\.webp$|-medium\.webp$/i.test(filePath)) {
+        res.setHeader("Cache-Control", "public, max-age=2592000, immutable");
+        return;
+      }
+
+      res.setHeader("Cache-Control", "public, max-age=86400");
+    },
+  }),
+);
 app.use(express.static(path.join(__dirname, "public")));
 
 app.use("/api/auth", authRouter);

@@ -1,8 +1,13 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { Filter, Search, SlidersHorizontal, X } from "lucide-react";
-import { getProperties, type PropertySummary } from "@/services/propertyService";
+import {
+  getProperties,
+  type PropertyQueryFilters,
+  type PropertySummary,
+} from "@/services/propertyService";
 import { PropertyCard } from "@/components/shared/PropertyCard";
 import { PaginationControls } from "@/components/shared/PaginationControls";
 
@@ -22,6 +27,7 @@ const PROPERTY_TYPES = [
 const ITEMS_PER_PAGE = 6;
 
 export default function ListingPage() {
+  const searchParams = useSearchParams();
   const [properties, setProperties] = useState<PropertySummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
@@ -30,13 +36,41 @@ export default function ListingPage() {
   const [selectedRating, setSelectedRating] = useState(0);
   const [selectedCities, setSelectedCities] = useState<string[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
+  const locationQuery = searchParams.get("location")?.trim() || "";
+  const typeQuery = searchParams.get("type")?.trim() || "";
+  const checkInQuery = searchParams.get("checkIn")?.trim() || "";
+  const checkOutQuery = searchParams.get("checkOut")?.trim() || "";
+  const hasGuestQuery = searchParams.has("guests");
+  const guestsQuery = Number(searchParams.get("guests") || 1);
+  const requiredGuests = Number.isFinite(guestsQuery) && guestsQuery > 0 ? guestsQuery : 1;
+  const initialPropertyType = PROPERTY_TYPES.includes(typeQuery) ? typeQuery : "All";
+
+  const serverFilters = useMemo<PropertyQueryFilters>(
+    () => ({
+      location: locationQuery,
+      type: initialPropertyType !== "All" ? initialPropertyType : undefined,
+      guests: requiredGuests > 1 ? requiredGuests : undefined,
+      checkIn: checkInQuery || undefined,
+      checkOut: checkOutQuery || undefined,
+    }),
+    [checkInQuery, checkOutQuery, initialPropertyType, locationQuery, requiredGuests],
+  );
 
   useEffect(() => {
-    getProperties()
+    setLoading(true);
+
+    getProperties(serverFilters)
       .then(setProperties)
       .catch(console.error)
       .finally(() => setLoading(false));
-  }, []);
+  }, [serverFilters]);
+
+  useEffect(() => {
+    setSearchQuery(locationQuery);
+    setSelectedType(initialPropertyType);
+    setSelectedCities([]);
+    setCurrentPage(1);
+  }, [initialPropertyType, locationQuery, requiredGuests, checkInQuery, checkOutQuery]);
 
   const cityOptions = useMemo(
     () => [...new Set(properties.map((property) => property.city).filter(Boolean))].sort(),
@@ -58,10 +92,26 @@ export default function ListingPage() {
       const matchesRating = property.rating >= selectedRating;
       const matchesCity =
         selectedCities.length === 0 || selectedCities.includes(property.city);
+      const matchesGuests = property.maxGuests >= requiredGuests;
 
-      return matchesSearch && matchesPrice && matchesType && matchesRating && matchesCity;
+      return (
+        matchesSearch &&
+        matchesPrice &&
+        matchesType &&
+        matchesRating &&
+        matchesCity &&
+        matchesGuests
+      );
     });
-  }, [priceMax, properties, searchQuery, selectedCities, selectedRating, selectedType]);
+  }, [
+    priceMax,
+    properties,
+    requiredGuests,
+    searchQuery,
+    selectedCities,
+    selectedRating,
+    selectedType,
+  ]);
 
   useEffect(() => {
     setCurrentPage(1);
@@ -90,6 +140,28 @@ export default function ListingPage() {
     setSelectedRating(0);
     setSelectedCities([]);
   }
+
+  const tripSummary = useMemo(() => {
+    const parts: string[] = [];
+
+    if (locationQuery) {
+      parts.push(`in ${locationQuery}`);
+    }
+
+    if (hasGuestQuery) {
+      parts.push(
+        requiredGuests > 1
+          ? `for ${requiredGuests} guests`
+          : "for 1 guest",
+      );
+    }
+
+    if (checkInQuery && checkOutQuery) {
+      parts.push(`from ${checkInQuery} to ${checkOutQuery}`);
+    }
+
+    return parts.length > 0 ? `Showing stays ${parts.join(" ")}` : "";
+  }, [checkInQuery, checkOutQuery, hasGuestQuery, locationQuery, requiredGuests]);
 
   function FilterSidebar() {
     return (
@@ -238,7 +310,7 @@ export default function ListingPage() {
             <div>
               <h1 style={{ fontWeight: 800 }}>Explore Homestays</h1>
               <p style={{ color: "#64748b" }}>
-                {filteredProperties.length} properties available
+                {tripSummary || `${filteredProperties.length} properties available`}
               </p>
             </div>
 
@@ -281,7 +353,7 @@ export default function ListingPage() {
               }}
             >
               <Filter size={15} />
-              Listings are paginated to keep the page responsive.
+              Refine the list by price, stay type, city, rating, and guest capacity.
             </div>
 
             {paginatedProperties.length === 0 ? (

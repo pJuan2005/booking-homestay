@@ -35,6 +35,19 @@ CREATE TABLE `amenities` (
 -- --------------------------------------------------------
 
 --
+-- Table structure for table `app_settings`
+--
+
+CREATE TABLE `app_settings` (
+  `id` int(11) NOT NULL,
+  `setting_key` varchar(100) NOT NULL,
+  `setting_value` varchar(255) NOT NULL,
+  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- --------------------------------------------------------
+
+--
 -- Table structure for table `booking_conversations`
 --
 
@@ -184,6 +197,13 @@ ALTER TABLE `amenities`
   ADD PRIMARY KEY (`id`);
 
 --
+-- Indexes for table `app_settings`
+--
+ALTER TABLE `app_settings`
+  ADD PRIMARY KEY (`id`),
+  ADD UNIQUE KEY `idx_app_settings_key` (`setting_key`);
+
+--
 -- Indexes for table `booking_conversations`
 --
 ALTER TABLE `booking_conversations`
@@ -253,6 +273,12 @@ ALTER TABLE `users`
 -- AUTO_INCREMENT for table `amenities`
 --
 ALTER TABLE `amenities`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
+
+--
+-- AUTO_INCREMENT for table `app_settings`
+--
+ALTER TABLE `app_settings`
   MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
 
 --
@@ -377,6 +403,10 @@ INSERT INTO amenities (id,name) VALUES
 (8,'Balcony'),
 (9,'Workspace'),
 (10,'Hot Water');
+
+INSERT INTO app_settings (setting_key, setting_value) VALUES
+('usd_to_vnd_rate', '25000'),
+('platform_commission_rate', '0.1');
 
 INSERT INTO properties
 (id,host_id,title,description,property_type,price_per_night,street_address,city,country,max_guests,bedrooms,bathrooms,status,cover_image)

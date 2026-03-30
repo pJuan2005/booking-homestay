@@ -7,7 +7,10 @@ export interface HostDashboardSummary {
   reviewCount: number;
   propertiesThisMonth: number;
   bookingsThisWeek: number;
+  grossRevenue: number;
   totalRevenue: number;
+  platformFeeAmount: number;
+  platformCommissionRate: number;
   averageRating: number;
 }
 
@@ -51,12 +54,19 @@ export interface AdminDashboardSummary {
   pendingBookings: number;
   cancelledBookings: number;
   totalRevenue: number;
+  grossRevenue: number;
+  platformRevenue: number;
+  hostPayoutTotal: number;
+  platformCommissionRate: number;
 }
 
 export interface MonthlyPerformancePoint {
   month: string;
   period: string;
   revenue: number;
+  grossRevenue: number;
+  platformRevenue: number;
+  hostPayout: number;
   bookings: number;
 }
 
@@ -86,6 +96,8 @@ export interface TopHostRecord {
   properties: number;
   bookings: number;
   revenue: number;
+  grossRevenue: number;
+  platformRevenue: number;
 }
 
 export interface AdminReportsData {
@@ -105,7 +117,10 @@ function mapHostDashboard(data: any): HostDashboardData {
       reviewCount: Number(data?.summary?.reviewCount || 0),
       propertiesThisMonth: Number(data?.summary?.propertiesThisMonth || 0),
       bookingsThisWeek: Number(data?.summary?.bookingsThisWeek || 0),
+      grossRevenue: Number(data?.summary?.grossRevenue || 0),
       totalRevenue: Number(data?.summary?.totalRevenue || 0),
+      platformFeeAmount: Number(data?.summary?.platformFeeAmount || 0),
+      platformCommissionRate: Number(data?.summary?.platformCommissionRate || 0),
       averageRating: Number(data?.summary?.averageRating || 0),
     },
     recentBookings: Array.isArray(data?.recentBookings)
@@ -148,6 +163,10 @@ function mapAdminSummary(summary: any): AdminDashboardSummary {
     pendingBookings: Number(summary?.pendingBookings || 0),
     cancelledBookings: Number(summary?.cancelledBookings || 0),
     totalRevenue: Number(summary?.totalRevenue || 0),
+    grossRevenue: Number(summary?.grossRevenue || 0),
+    platformRevenue: Number(summary?.platformRevenue || 0),
+    hostPayoutTotal: Number(summary?.hostPayoutTotal || 0),
+    platformCommissionRate: Number(summary?.platformCommissionRate || 0),
   };
 }
 
@@ -160,6 +179,9 @@ function mapMonthlyPerformance(data: any): MonthlyPerformancePoint[] {
     month: String(point.month || ""),
     period: String(point.period || ""),
     revenue: Number(point.revenue || 0),
+    grossRevenue: Number(point.grossRevenue || point.revenue || 0),
+    platformRevenue: Number(point.platformRevenue || 0),
+    hostPayout: Number(point.hostPayout || 0),
     bookings: Number(point.bookings || 0),
   }));
 }
@@ -201,6 +223,8 @@ function mapTopHosts(data: any): TopHostRecord[] {
     properties: Number(host.properties || 0),
     bookings: Number(host.bookings || 0),
     revenue: Number(host.revenue || 0),
+    grossRevenue: Number(host.grossRevenue || 0),
+    platformRevenue: Number(host.platformRevenue || 0),
   }));
 }
 

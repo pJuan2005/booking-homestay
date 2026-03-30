@@ -5,6 +5,8 @@ const db_connection = mysql.createConnection({
   user: "root",
   password: "",
   database: "booking_db",
+  dateStrings: true,
+  timezone: "+07:00",
 });
 
 db_connection.connect(function (err) {

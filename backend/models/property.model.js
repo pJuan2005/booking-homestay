@@ -1,6 +1,64 @@
 const db = require("../common/db");
+const { buildVariantUrl } = require("../common/propertyUpload");
 
 const Property = {};
+
+function normalizePublicPropertyFilters(filters = {}) {
+  return {
+    location: String(filters.location || "").trim(),
+    type: String(filters.type || "").trim(),
+    checkIn: String(filters.checkIn || "").trim(),
+    checkOut: String(filters.checkOut || "").trim(),
+    guests: Number.isFinite(Number(filters.guests))
+      ? Math.trunc(Number(filters.guests))
+      : 0,
+  };
+}
+
+function buildPublicPropertyWhereClause(filters = {}) {
+  const normalizedFilters = normalizePublicPropertyFilters(filters);
+  const clauses = ["p.status = 'approved'", "p.is_deleted = 0"];
+  const params = [];
+
+  if (normalizedFilters.location) {
+    const likeValue = `%${normalizedFilters.location}%`;
+    clauses.push(`(
+      p.title LIKE ?
+      OR p.street_address LIKE ?
+      OR p.city LIKE ?
+      OR p.country LIKE ?
+      OR p.property_type LIKE ?
+    )`);
+    params.push(likeValue, likeValue, likeValue, likeValue, likeValue);
+  }
+
+  if (normalizedFilters.type) {
+    clauses.push("p.property_type = ?");
+    params.push(normalizedFilters.type);
+  }
+
+  if (normalizedFilters.guests > 0) {
+    clauses.push("p.max_guests >= ?");
+    params.push(normalizedFilters.guests);
+  }
+
+  if (normalizedFilters.checkIn && normalizedFilters.checkOut) {
+    clauses.push(`NOT EXISTS (
+      SELECT 1
+      FROM bookings b
+      WHERE b.property_id = p.id
+        AND b.status IN ('pending', 'confirmed')
+        AND ? < b.check_out
+        AND ? > b.check_in
+    )`);
+    params.push(normalizedFilters.checkIn, normalizedFilters.checkOut);
+  }
+
+  return {
+    whereClause: clauses.join(" AND "),
+    params,
+  };
+}
 
 function mapPropertySummaryRow(row) {
   return {
@@ -17,7 +75,7 @@ function mapPropertySummaryRow(row) {
     bedrooms: Number(row.bedrooms || 0),
     bathrooms: Number(row.bathrooms || 0),
     status: row.status,
-    image: row.image,
+    image: buildVariantUrl(row.image, "thumb"),
     featured: Boolean(row.featured),
     hostName: row.hostName,
     reviews: Number(row.reviews || 0),
@@ -101,8 +159,10 @@ async function buildPropertyDetail(row) {
     bedrooms: Number(row.bedrooms || 0),
     bathrooms: Number(row.bathrooms || 0),
     status: row.status,
-    image: row.cover_image,
-    images,
+    image: buildVariantUrl(row.cover_image, "medium"),
+    coverImageOriginal: row.cover_image,
+    images: images.map((image) => buildVariantUrl(image, "medium")),
+    originalImages: images,
     amenities,
     reviews,
     reviewCount: Number(row.reviewCount || 0),
@@ -167,11 +227,119 @@ async function getPropertyList(whereClause, params = []) {
   return rows.map(mapPropertySummaryRow);
 }
 
-Property.getAll = async () =>
-  getPropertyList("p.status = 'approved' AND p.is_deleted = 0");
+Property.getAll = async (filters = {}) => {
+  const { whereClause, params } = buildPublicPropertyWhereClause(filters);
+  return getPropertyList(whereClause, params);
+};
 
 Property.getById = async (id) =>
   getPropertyDetail("p.id = ? AND p.status = 'approved' AND p.is_deleted = 0", [id]);
+
+Property.checkAvailability = async (id, filters = {}) => {
+  const normalizedFilters = normalizePublicPropertyFilters(filters);
+  const [propertyRows] = await db.promise().query(
+    `SELECT id, status, is_deleted, max_guests
+     FROM properties
+     WHERE id = ?
+     LIMIT 1`,
+    [id],
+  );
+
+  if (!propertyRows.length) {
+    return {
+      exists: false,
+      available: false,
+      reason: "Property not found.",
+    };
+  }
+
+  const property = propertyRows[0];
+
+  if (property.is_deleted || property.status !== "approved") {
+    return {
+      exists: true,
+      available: false,
+      reason: "This property is not available for public booking.",
+    };
+  }
+
+  if (!normalizedFilters.checkIn || !normalizedFilters.checkOut) {
+    return {
+      exists: true,
+      available: true,
+      reason: "",
+    };
+  }
+
+  const [conflictRows] = await db.promise().query(
+    `SELECT COUNT(*) AS total
+     FROM bookings
+     WHERE property_id = ?
+       AND status IN ('pending', 'confirmed')
+       AND ? < check_out
+       AND ? > check_in`,
+    [id, normalizedFilters.checkIn, normalizedFilters.checkOut],
+  );
+
+  const conflictCount = Number(conflictRows[0]?.total || 0);
+
+  return {
+    exists: true,
+    available: conflictCount === 0,
+    reason:
+      conflictCount === 0
+        ? ""
+        : "The selected dates are no longer available. Please choose another stay period.",
+  };
+};
+
+Property.getUnavailableDateRanges = async (id) => {
+  const [propertyRows] = await db.promise().query(
+    `SELECT id, status, is_deleted
+     FROM properties
+     WHERE id = ?
+     LIMIT 1`,
+    [id],
+  );
+
+  if (!propertyRows.length) {
+    return {
+      exists: false,
+      ranges: [],
+    };
+  }
+
+  const property = propertyRows[0];
+
+  if (property.is_deleted || property.status !== "approved") {
+    return {
+      exists: true,
+      ranges: [],
+    };
+  }
+
+  const [rows] = await db.promise().query(
+    `SELECT
+      DATE_FORMAT(check_in, '%Y-%m-%d') AS checkIn,
+      DATE_FORMAT(check_out, '%Y-%m-%d') AS checkOut,
+      status
+     FROM bookings
+     WHERE property_id = ?
+       AND status IN ('pending', 'confirmed')
+       AND check_out > CURDATE()
+     ORDER BY check_in ASC`,
+    [id],
+  );
+
+  return {
+    exists: true,
+    ranges: rows.map((row) => ({
+      checkIn: row.checkIn,
+      checkOut: row.checkOut,
+      status: row.status,
+    })),
+  };
+};
 
 Property.getAllAdmin = async () => getPropertyList("p.is_deleted = 0");
 

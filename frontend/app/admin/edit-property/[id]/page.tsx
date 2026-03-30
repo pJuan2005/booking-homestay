@@ -59,7 +59,7 @@ export default function AdminEditPropertyPage() {
         setProperty(data);
         setForm(createPropertyFormFromDetail(data));
         setStatus(String(data.status).toLowerCase());
-        setExistingDetailImages(data.images || []);
+        setExistingDetailImages(data.originalImages || data.images || []);
       } catch (error) {
         setGeneralError(
           error instanceof Error
@@ -153,7 +153,7 @@ export default function AdminEditPropertyPage() {
       setProperty(data);
       setForm(createPropertyFormFromDetail(data));
       setStatus(String(data.status).toLowerCase());
-      setExistingDetailImages(data.images || []);
+      setExistingDetailImages(data.originalImages || data.images || []);
       setRemovedDetailImages([]);
       setDetailImages([]);
       setCoverImage(null);

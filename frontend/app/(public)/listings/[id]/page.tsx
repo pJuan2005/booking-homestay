@@ -2,12 +2,18 @@
 import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
+import DatePicker from "react-datepicker";
 import {
   MapPin, Star, Users, Bed, Bath, Wifi, Utensils, Car, Wind,
   Waves, Dumbbell, Flame, TreePine, ArrowLeft, Calendar, ChevronLeft,
   ChevronRight, Heart, CheckCircle, MessageSquare, TrendingUp
 } from "lucide-react";
-import { getPropertyById } from "@/services/propertyService";
+import {
+  getPropertyAvailability,
+  getPropertyById,
+  getPropertyUnavailableDates,
+  type PropertyUnavailableDateRange,
+} from "@/services/propertyService";
 import {
   createBooking,
   uploadPaymentProof,
@@ -52,6 +58,75 @@ function StarDisplay({ rating, size = 14 }: { rating: number; size?: number }) {
   );
 }
 
+function formatUsd(amount: number) {
+  return `$${Number(amount || 0).toFixed(2)}`;
+}
+
+function parseLocalDate(dateString: string) {
+  const [year, month, day] = dateString.split("-").map(Number);
+
+  if (!year || !month || !day) {
+    return null;
+  }
+
+  return new Date(year, month - 1, day, 12, 0, 0, 0);
+}
+
+function formatLocalDate(date: Date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function addDays(date: Date, days: number) {
+  const nextDate = new Date(date);
+  nextDate.setDate(nextDate.getDate() + days);
+  nextDate.setHours(12, 0, 0, 0);
+  return nextDate;
+}
+
+function buildBlockedCheckInDates(ranges: PropertyUnavailableDateRange[]) {
+  const blockedDates: Date[] = [];
+
+  ranges.forEach((range) => {
+    const startDate = parseLocalDate(range.checkIn);
+    const endDate = parseLocalDate(range.checkOut);
+
+    if (!startDate || !endDate) {
+      return;
+    }
+
+    for (
+      let cursor = new Date(startDate);
+      cursor < endDate;
+      cursor = addDays(cursor, 1)
+    ) {
+      blockedDates.push(new Date(cursor));
+    }
+  });
+
+  return blockedDates;
+}
+
+function getNextBlockedStartDate(
+  ranges: PropertyUnavailableDateRange[],
+  checkIn: string,
+) {
+  const selectedCheckIn = parseLocalDate(checkIn);
+
+  if (!selectedCheckIn) {
+    return null;
+  }
+
+  const futureBlockedStarts = ranges
+    .map((range) => parseLocalDate(range.checkIn))
+    .filter((date): date is Date => date !== null && date > selectedCheckIn)
+    .sort((firstDate, secondDate) => firstDate.getTime() - secondDate.getTime());
+
+  return futureBlockedStarts[0] || null;
+}
+
 export default function DetailPage() {
   const { id } = useParams();
   const router = useRouter();
@@ -67,6 +142,19 @@ export default function DetailPage() {
   const [createdBooking, setCreatedBooking] = useState<BookingRecord | null>(null);
   const [isSubmittingBooking, setIsSubmittingBooking] = useState(false);
   const [isUploadingProof, setIsUploadingProof] = useState(false);
+  const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
+  const [unavailableRanges, setUnavailableRanges] = useState<
+    PropertyUnavailableDateRange[]
+  >([]);
+  const [availabilityState, setAvailabilityState] = useState<{
+    isChecking: boolean;
+    isAvailable: boolean | null;
+    message: string;
+  }>({
+    isChecking: false,
+    isAvailable: null,
+    message: "",
+  });
 
   useEffect(() => {
     if (id) {
@@ -76,6 +164,105 @@ export default function DetailPage() {
         .finally(() => setLoading(false));
     }
   }, [id]);
+
+  useEffect(() => {
+    if (!id) {
+      return;
+    }
+
+    getPropertyUnavailableDates(id as string)
+      .then((ranges) => setUnavailableRanges(ranges))
+      .catch(() => setUnavailableRanges([]));
+  }, [id]);
+
+  useEffect(() => {
+    let isCancelled = false;
+
+    async function checkAvailability() {
+      if (!property?.id || !bookingForm.checkIn || !bookingForm.checkOut) {
+        setAvailabilityState({
+          isChecking: false,
+          isAvailable: null,
+          message: "",
+        });
+        return;
+      }
+
+      if (new Date(bookingForm.checkOut) <= new Date(bookingForm.checkIn)) {
+        setAvailabilityState({
+          isChecking: false,
+          isAvailable: false,
+          message: "Check-out date must be after check-in date.",
+        });
+        return;
+      }
+
+      setAvailabilityState({
+        isChecking: true,
+        isAvailable: null,
+        message: "",
+      });
+
+      try {
+        const response = await getPropertyAvailability(property.id, {
+          checkIn: bookingForm.checkIn,
+          checkOut: bookingForm.checkOut,
+        });
+
+        if (isCancelled) {
+          return;
+        }
+
+        setAvailabilityState({
+          isChecking: false,
+          isAvailable: response.available,
+          message: response.message,
+        });
+      } catch (error) {
+        if (isCancelled) {
+          return;
+        }
+
+        setAvailabilityState({
+          isChecking: false,
+          isAvailable: false,
+          message:
+            error instanceof Error
+              ? error.message
+              : "Unable to check availability right now.",
+        });
+      }
+    }
+
+    checkAvailability();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [bookingForm.checkIn, bookingForm.checkOut, property?.id]);
+
+  useEffect(() => {
+    if (!bookingForm.checkIn || !bookingForm.checkOut) {
+      return;
+    }
+
+    const nextBlockedStartDate = getNextBlockedStartDate(
+      unavailableRanges,
+      bookingForm.checkIn,
+    );
+    const selectedCheckOutDate = parseLocalDate(bookingForm.checkOut);
+
+    if (
+      nextBlockedStartDate &&
+      selectedCheckOutDate &&
+      selectedCheckOutDate > nextBlockedStartDate
+    ) {
+      setBookingForm((currentForm) => ({
+        ...currentForm,
+        checkOut: formatLocalDate(nextBlockedStartDate),
+      }));
+    }
+  }, [bookingForm.checkIn, bookingForm.checkOut, unavailableRanges]);
 
   // Loading state
   if (loading) {
@@ -106,18 +293,43 @@ export default function DetailPage() {
     );
   }
 
-  const allImages = property.images && property.images.length > 0 ? property.images : [property.image];
+  const allImages = Array.from(
+    new Set(
+      [property.image, ...(Array.isArray(property.images) ? property.images : [])].filter(
+        Boolean,
+      ),
+    ),
+  );
   const nights = (() => {
     if (!bookingForm.checkIn || !bookingForm.checkOut) return 0;
     const diff = new Date(bookingForm.checkOut).getTime() - new Date(bookingForm.checkIn).getTime();
     return Math.max(0, Math.floor(diff / (1000 * 60 * 60 * 24)));
   })();
   const subtotal = property.price * nights;
-  const serviceFee = Math.round(subtotal * 0.12);
-  const total = subtotal + serviceFee;
+  const serviceFee = Number((subtotal * 0.12).toFixed(2));
+  const total = Number((subtotal + serviceFee).toFixed(2));
+  const isBookingDisabled =
+    isSubmittingBooking ||
+    availabilityState.isChecking ||
+    availabilityState.isAvailable === false;
 
   const propertyReviews = property.reviews || [];
   const avgRating = Number(property.rating) || 0;
+  const today = new Date();
+  today.setHours(12, 0, 0, 0);
+  const selectedCheckInDate = bookingForm.checkIn
+    ? parseLocalDate(bookingForm.checkIn)
+    : null;
+  const selectedCheckOutDate = bookingForm.checkOut
+    ? parseLocalDate(bookingForm.checkOut)
+    : null;
+  const blockedCheckInDates = buildBlockedCheckInDates(unavailableRanges);
+  const checkoutMinDate = selectedCheckInDate
+    ? addDays(selectedCheckInDate, 1)
+    : addDays(today, 1);
+  const checkoutMaxDate = bookingForm.checkIn
+    ? getNextBlockedStartDate(unavailableRanges, bookingForm.checkIn)
+    : null;
 
   const handleBooking = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -145,7 +357,28 @@ export default function DetailPage() {
       });
 
       setCreatedBooking(response.data);
+      setUnavailableRanges((currentRanges) => {
+        const alreadyExists = currentRanges.some(
+          (range) =>
+            range.checkIn === response.data.checkIn &&
+            range.checkOut === response.data.checkOut,
+        );
+
+        if (alreadyExists) {
+          return currentRanges;
+        }
+
+        return [
+          ...currentRanges,
+          {
+            checkIn: response.data.checkIn,
+            checkOut: response.data.checkOut,
+            status: response.data.status,
+          },
+        ];
+      });
       setBookingMessage(response.message);
+      setIsPaymentModalOpen(true);
     } catch (error) {
       setBookingError(
         error instanceof Error
@@ -475,32 +708,33 @@ export default function DetailPage() {
                       </p>
                     </div>
 
-                    <PaymentInstructionsCard
-                      booking={createdBooking}
-                      onUpload={handleUploadPaymentProof}
-                      isUploading={isUploadingProof}
-                      uploadError={bookingError}
-                      uploadSuccess={bookingMessage}
-                    />
-
-                    <div style={{ display: "flex", gap: 10, marginTop: 16 }}>
-                      <Link href="/dashboard" style={{ flex: 1 }}>
-                        <button className="btn-primary-hs" style={{ width: "100%" }}>
+                    <div style={{ display: "grid", gap: 10 }}>
+                      <button
+                        className="btn-primary-hs"
+                        style={{ width: "100%" }}
+                        onClick={() => setIsPaymentModalOpen(true)}
+                      >
+                        View payment instructions
+                      </button>
+                      <Link href="/dashboard" style={{ width: "100%" }}>
+                        <button className="btn-outline-hs" style={{ width: "100%" }}>
                           Go to dashboard
                         </button>
                       </Link>
-                      <button
-                        className="btn-outline-hs"
-                        style={{ flex: 1 }}
-                        onClick={() => {
-                          setCreatedBooking(null);
-                          setBookingMessage("");
-                          setBookingError("");
-                        }}
-                      >
-                        Create another request
-                      </button>
                     </div>
+
+                    <button
+                      className="btn-outline-hs"
+                      style={{ width: "100%", marginTop: 16 }}
+                      onClick={() => {
+                        setCreatedBooking(null);
+                        setIsPaymentModalOpen(false);
+                        setBookingMessage("");
+                        setBookingError("");
+                      }}
+                    >
+                      Create another request
+                    </button>
                   </div>
                 ) : (
                   <form onSubmit={handleBooking} style={{ marginTop: 16 }}>
@@ -508,18 +742,66 @@ export default function DetailPage() {
                       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", borderBottom: "1px solid #e2e8f0" }}>
                         <div style={{ padding: "12px 14px", borderRight: "1px solid #e2e8f0" }}>
                           <div style={{ fontSize: "0.7rem", fontWeight: 700, color: "#1e293b", letterSpacing: 0.5, textTransform: "uppercase" }}>Check-in</div>
-                          <input type="date" required
-                            style={{ border: "none", outline: "none", width: "100%", fontSize: "0.85rem", color: "#475569", padding: 0, background: "transparent", marginTop: 2 }}
-                            value={bookingForm.checkIn}
-                            onChange={e => setBookingForm({ ...bookingForm, checkIn: e.target.value })}
+                          <DatePicker
+                            selected={selectedCheckInDate}
+                            onChange={(selectedDate: Date | null) => {
+                              const nextCheckIn = selectedDate
+                                ? formatLocalDate(selectedDate)
+                                : "";
+
+                              setBookingForm((currentForm) => {
+                                const currentCheckOutDate = currentForm.checkOut
+                                  ? parseLocalDate(currentForm.checkOut)
+                                  : null;
+                                const shouldResetCheckout =
+                                  !selectedDate ||
+                                  !currentCheckOutDate ||
+                                  currentCheckOutDate <= selectedDate;
+
+                                return {
+                                  ...currentForm,
+                                  checkIn: nextCheckIn,
+                                  checkOut: shouldResetCheckout
+                                    ? ""
+                                    : currentForm.checkOut,
+                                };
+                              });
+                            }}
+                            minDate={today}
+                            excludeDates={blockedCheckInDates}
+                            placeholderText="dd/mm/yyyy"
+                            dateFormat="dd/MM/yyyy"
+                            className="hs-datepicker-input"
+                            wrapperClassName="hs-datepicker-wrapper"
+                            popperPlacement="bottom-start"
+                            required
                           />
                         </div>
                         <div style={{ padding: "12px 14px" }}>
                           <div style={{ fontSize: "0.7rem", fontWeight: 700, color: "#1e293b", letterSpacing: 0.5, textTransform: "uppercase" }}>Check-out</div>
-                          <input type="date" required
-                            style={{ border: "none", outline: "none", width: "100%", fontSize: "0.85rem", color: "#475569", padding: 0, background: "transparent", marginTop: 2 }}
-                            value={bookingForm.checkOut}
-                            onChange={e => setBookingForm({ ...bookingForm, checkOut: e.target.value })}
+                          <DatePicker
+                            selected={selectedCheckOutDate}
+                            onChange={(selectedDate: Date | null) =>
+                              setBookingForm((currentForm) => ({
+                                ...currentForm,
+                                checkOut: selectedDate
+                                  ? formatLocalDate(selectedDate)
+                                  : "",
+                              }))
+                            }
+                            minDate={checkoutMinDate}
+                            maxDate={checkoutMaxDate || undefined}
+                            placeholderText={
+                              selectedCheckInDate
+                                ? "dd/mm/yyyy"
+                                : "Select check-in first"
+                            }
+                            dateFormat="dd/MM/yyyy"
+                            className="hs-datepicker-input"
+                            wrapperClassName="hs-datepicker-wrapper"
+                            popperPlacement="bottom-end"
+                            disabled={!selectedCheckInDate}
+                            required
                           />
                         </div>
                       </div>
@@ -540,16 +822,58 @@ export default function DetailPage() {
                     <button
                       type="submit"
                       className="btn-primary-hs"
-                      style={{ width: "100%", marginBottom: 12, fontSize: "0.95rem" }}
-                      disabled={isSubmittingBooking}
+                      style={{
+                        width: "100%",
+                        marginBottom: 12,
+                        fontSize: "0.95rem",
+                        opacity: isBookingDisabled ? 0.75 : 1,
+                        cursor: isBookingDisabled ? "not-allowed" : "pointer",
+                      }}
+                      disabled={isBookingDisabled}
                     >
                       <Calendar size={16} style={{ marginRight: 6, verticalAlign: "middle" }} />
-                      {isSubmittingBooking ? "Submitting request..." : "Request booking"}
+                      {isSubmittingBooking
+                        ? "Submitting request..."
+                        : availabilityState.isChecking
+                        ? "Checking availability..."
+                        : availabilityState.isAvailable === false
+                        ? "Dates unavailable"
+                        : "Request booking"}
                     </button>
 
                     <p style={{ textAlign: "center", color: "#94a3b8", fontSize: "0.78rem", margin: "0 0 14px" }}>
                       We will create a pending booking and show the transfer details next.
                     </p>
+
+                    <p style={{ textAlign: "center", color: "#64748b", fontSize: "0.78rem", margin: "0 0 14px" }}>
+                      Busy dates are locked in the calendar so you can spot unavailable periods before submitting.
+                    </p>
+
+                    {availabilityState.message && !bookingError && (
+                      <div
+                        style={{
+                          background:
+                            availabilityState.isAvailable === false
+                              ? "#fef2f2"
+                              : "#f0fdf4",
+                          border: `1px solid ${
+                            availabilityState.isAvailable === false
+                              ? "#fecaca"
+                              : "#bbf7d0"
+                          }`,
+                          borderRadius: 10,
+                          padding: "10px 12px",
+                          color:
+                            availabilityState.isAvailable === false
+                              ? "#b91c1c"
+                              : "#166534",
+                          fontSize: "0.82rem",
+                          marginBottom: 14,
+                        }}
+                      >
+                        {availabilityState.message}
+                      </div>
+                    )}
 
                     {bookingError && (
                       <div
@@ -570,16 +894,16 @@ export default function DetailPage() {
                     {nights > 0 && (
                       <div style={{ borderTop: "1px solid #e2e8f0", paddingTop: 14 }}>
                         <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.88rem", color: "#475569", marginBottom: 8 }}>
-                          <span>${property.price} × {nights} nights</span>
-                          <span>${subtotal}</span>
+                          <span>{formatUsd(property.price)} × {nights} nights</span>
+                          <span>{formatUsd(subtotal)}</span>
                         </div>
                         <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.88rem", color: "#475569", marginBottom: 8 }}>
                           <span>Service fee</span>
-                          <span>${serviceFee}</span>
+                          <span>{formatUsd(serviceFee)}</span>
                         </div>
                         <div style={{ display: "flex", justifyContent: "space-between", fontWeight: 800, color: "#1e293b", paddingTop: 10, borderTop: "1px solid #e2e8f0" }}>
                           <span>Total</span>
-                          <span>${total}</span>
+                          <span>{formatUsd(total)}</span>
                         </div>
                       </div>
                     )}
@@ -590,6 +914,77 @@ export default function DetailPage() {
           </div>
         </div>
       </div>
+
+      {createdBooking && isPaymentModalOpen && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(15, 23, 42, 0.55)",
+            zIndex: 1000,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: 16,
+          }}
+          onClick={() => setIsPaymentModalOpen(false)}
+        >
+          <div
+            style={{
+              width: "min(980px, 100%)",
+              maxHeight: "90vh",
+              overflowY: "auto",
+              background: "#fff",
+              borderRadius: 22,
+              padding: 20,
+              boxShadow: "0 32px 60px rgba(15, 23, 42, 0.28)",
+            }}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                gap: 12,
+                marginBottom: 14,
+              }}
+            >
+              <div>
+                <div
+                  style={{
+                    fontWeight: 800,
+                    color: "#1e293b",
+                    fontSize: "1.08rem",
+                    marginBottom: 4,
+                  }}
+                >
+                  Complete your transfer
+                </div>
+                <div style={{ color: "#64748b", fontSize: "0.84rem" }}>
+                  The QR below is larger so it is easier to scan right after
+                  your booking request is created.
+                </div>
+              </div>
+              <button
+                className="btn-outline-hs"
+                onClick={() => setIsPaymentModalOpen(false)}
+              >
+                Close
+              </button>
+            </div>
+
+            <PaymentInstructionsCard
+              booking={createdBooking}
+              onUpload={handleUploadPaymentProof}
+              isUploading={isUploadingProof}
+              uploadError={bookingError}
+              uploadSuccess={bookingMessage}
+              qrMaxWidth={280}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

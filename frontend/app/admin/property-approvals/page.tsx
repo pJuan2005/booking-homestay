@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useEffect, useMemo, useState } from "react";
 import {
   Bath,
@@ -17,9 +18,13 @@ import {
   updatePropertyStatus,
   type PropertySummary,
 } from "@/services/propertyService";
+import { isBackendUploadImage } from "@/lib/image";
 import { StatusBadge } from "@/components/shared/StatusBadge";
+import { PaginationControls } from "@/components/shared/PaginationControls";
 
 type AdminPropertyDetail = Awaited<ReturnType<typeof getAdminPropertyById>>;
+const PENDING_ITEMS_PER_PAGE = 8;
+const HANDLED_ITEMS_PER_PAGE = 5;
 
 export default function PropertyApprovalsPage() {
   const [properties, setProperties] = useState<PropertySummary[]>([]);
@@ -31,6 +36,8 @@ export default function PropertyApprovalsPage() {
   const [rejectionReason, setRejectionReason] = useState("");
   const [notice, setNotice] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [pendingPage, setPendingPage] = useState(1);
+  const [handledPage, setHandledPage] = useState(1);
 
   useEffect(() => {
     fetchProperties();
@@ -55,11 +62,36 @@ export default function PropertyApprovalsPage() {
   );
 
   const recentlyHandled = useMemo(
-    () =>
-      properties
-        .filter((property) => property.status.toLowerCase() !== "pending")
-        .slice(0, 5),
+    () => properties.filter((property) => property.status.toLowerCase() !== "pending"),
     [properties],
+  );
+
+  useEffect(() => {
+    setPendingPage(1);
+  }, [pending.length]);
+
+  useEffect(() => {
+    setHandledPage(1);
+  }, [recentlyHandled.length]);
+
+  const pendingTotalPages = Math.max(
+    1,
+    Math.ceil(pending.length / PENDING_ITEMS_PER_PAGE),
+  );
+  const safePendingPage = Math.min(pendingPage, pendingTotalPages);
+  const paginatedPending = pending.slice(
+    (safePendingPage - 1) * PENDING_ITEMS_PER_PAGE,
+    safePendingPage * PENDING_ITEMS_PER_PAGE,
+  );
+
+  const handledTotalPages = Math.max(
+    1,
+    Math.ceil(recentlyHandled.length / HANDLED_ITEMS_PER_PAGE),
+  );
+  const safeHandledPage = Math.min(handledPage, handledTotalPages);
+  const paginatedHandled = recentlyHandled.slice(
+    (safeHandledPage - 1) * HANDLED_ITEMS_PER_PAGE,
+    safeHandledPage * HANDLED_ITEMS_PER_PAGE,
   );
 
   async function openDetail(id: number) {
@@ -284,13 +316,17 @@ export default function PropertyApprovalsPage() {
                 </tr>
               </thead>
               <tbody>
-                {pending.map((property) => (
+                {paginatedPending.map((property) => (
                   <tr key={property.id}>
                     <td>
                       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                        <img
+                        <Image
                           src={property.image}
                           alt={property.title}
+                          width={48}
+                          height={48}
+                          sizes="48px"
+                          unoptimized={isBackendUploadImage(property.image)}
                           style={{
                             width: 48,
                             height: 48,
@@ -440,6 +476,17 @@ export default function PropertyApprovalsPage() {
             </table>
           </div>
         )}
+
+        <div style={{ padding: "0 20px 20px" }}>
+          <PaginationControls
+            currentPage={safePendingPage}
+            totalPages={pendingTotalPages}
+            totalItems={pending.length}
+            pageSize={PENDING_ITEMS_PER_PAGE}
+            itemLabel="pending properties"
+            onPageChange={setPendingPage}
+          />
+        </div>
       </div>
 
       <div className="hs-card" style={{ overflow: "hidden" }}>
@@ -474,13 +521,17 @@ export default function PropertyApprovalsPage() {
                   </td>
                 </tr>
               ) : (
-                recentlyHandled.map((property) => (
+                paginatedHandled.map((property) => (
                   <tr key={property.id}>
                     <td>
                       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                        <img
+                        <Image
                           src={property.image}
                           alt={property.title}
+                          width={38}
+                          height={38}
+                          sizes="38px"
+                          unoptimized={isBackendUploadImage(property.image)}
                           style={{
                             width: 38,
                             height: 38,
@@ -527,6 +578,17 @@ export default function PropertyApprovalsPage() {
               )}
             </tbody>
           </table>
+        </div>
+
+        <div style={{ padding: "0 20px 20px" }}>
+          <PaginationControls
+            currentPage={safeHandledPage}
+            totalPages={handledTotalPages}
+            totalItems={recentlyHandled.length}
+            pageSize={HANDLED_ITEMS_PER_PAGE}
+            itemLabel="processed properties"
+            onPageChange={setHandledPage}
+          />
         </div>
       </div>
 
@@ -579,17 +641,25 @@ export default function PropertyApprovalsPage() {
               </div>
             ) : (
               <div style={{ padding: "24px" }}>
-                <img
-                  src={selectedProperty.image}
-                  alt={selectedProperty.title}
+                <div
                   style={{
+                    position: "relative",
                     width: "100%",
                     height: 240,
-                    objectFit: "cover",
                     borderRadius: 10,
+                    overflow: "hidden",
                     marginBottom: 18,
                   }}
-                />
+                >
+                  <Image
+                    src={selectedProperty.image}
+                    alt={selectedProperty.title}
+                    fill
+                    sizes="(max-width: 992px) 100vw, 700px"
+                    unoptimized={isBackendUploadImage(selectedProperty.image)}
+                    style={{ objectFit: "cover" }}
+                  />
+                </div>
 
                 {selectedProperty.images.length > 0 && (
                   <div
@@ -601,17 +671,25 @@ export default function PropertyApprovalsPage() {
                     }}
                   >
                     {selectedProperty.images.map((image) => (
-                      <img
+                      <div
                         key={image}
-                        src={image}
-                        alt={selectedProperty.title}
                         style={{
+                          position: "relative",
                           width: "100%",
                           height: 90,
-                          objectFit: "cover",
                           borderRadius: 8,
+                          overflow: "hidden",
                         }}
-                      />
+                      >
+                        <Image
+                          src={image}
+                          alt={selectedProperty.title}
+                          fill
+                          sizes="(max-width: 768px) 33vw, 120px"
+                          unoptimized={isBackendUploadImage(image)}
+                          style={{ objectFit: "cover" }}
+                        />
+                      </div>
                     ))}
                   </div>
                 )}
