@@ -90,6 +90,17 @@ export function PaymentInstructionsCard({
           >
             All bookings are paid to the platform admin payment account.
           </p>
+          <p
+            style={{
+              margin: "6px 0 0",
+              color: "#1d4ed8",
+              fontSize: "0.78rem",
+              fontWeight: 600,
+            }}
+          >
+            Standard stay policy: check-in after 2:00 PM and check-out before
+            12:00 PM.
+          </p>
         </div>
         <PaymentStatusBadge status={booking.paymentStatus} />
       </div>

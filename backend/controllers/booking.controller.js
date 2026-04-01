@@ -130,8 +130,7 @@ exports.createBooking = async (req, res) => {
     }
 
     const subtotal = property.pricePerNight * nights;
-    const serviceFee = Number((subtotal * 0.12).toFixed(2));
-    const totalPrice = Number((subtotal + serviceFee).toFixed(2));
+    const totalPrice = Number(subtotal.toFixed(2));
 
     const bookingId = await Booking.create({
       propertyId,

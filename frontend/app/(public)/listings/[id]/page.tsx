@@ -306,8 +306,7 @@ export default function DetailPage() {
     return Math.max(0, Math.floor(diff / (1000 * 60 * 60 * 24)));
   })();
   const subtotal = property.price * nights;
-  const serviceFee = Number((subtotal * 0.12).toFixed(2));
-  const total = Number((subtotal + serviceFee).toFixed(2));
+  const total = Number(subtotal.toFixed(2));
   const isBookingDisabled =
     isSubmittingBooking ||
     availabilityState.isChecking ||
@@ -706,6 +705,18 @@ export default function DetailPage() {
                         Complete the transfer, upload your payment proof, and wait
                         for the host or admin to confirm the booking.
                       </p>
+                      <p
+                        style={{
+                          margin: "8px 0 0",
+                          color: "#1d4ed8",
+                          fontSize: "0.8rem",
+                          lineHeight: 1.7,
+                          fontWeight: 600,
+                        }}
+                      >
+                        Standard check-in is after 2:00 PM and check-out is
+                        before 12:00 PM.
+                      </p>
                     </div>
 
                     <div style={{ display: "grid", gap: 10 }}>
@@ -849,6 +860,19 @@ export default function DetailPage() {
                       Busy dates are locked in the calendar so you can spot unavailable periods before submitting.
                     </p>
 
+                    <p
+                      style={{
+                        textAlign: "center",
+                        color: "#1d4ed8",
+                        fontSize: "0.78rem",
+                        margin: "0 0 14px",
+                        fontWeight: 600,
+                      }}
+                    >
+                      Standard check-in is after 2:00 PM and check-out is
+                      before 12:00 PM.
+                    </p>
+
                     {availabilityState.message && !bookingError && (
                       <div
                         style={{
@@ -896,10 +920,6 @@ export default function DetailPage() {
                         <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.88rem", color: "#475569", marginBottom: 8 }}>
                           <span>{formatUsd(property.price)} × {nights} nights</span>
                           <span>{formatUsd(subtotal)}</span>
-                        </div>
-                        <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.88rem", color: "#475569", marginBottom: 8 }}>
-                          <span>Service fee</span>
-                          <span>{formatUsd(serviceFee)}</span>
                         </div>
                         <div style={{ display: "flex", justifyContent: "space-between", fontWeight: 800, color: "#1e293b", paddingTop: 10, borderTop: "1px solid #e2e8f0" }}>
                           <span>Total</span>
@@ -964,6 +984,17 @@ export default function DetailPage() {
                 <div style={{ color: "#64748b", fontSize: "0.84rem" }}>
                   The QR below is larger so it is easier to scan right after
                   your booking request is created.
+                </div>
+                <div
+                  style={{
+                    color: "#1d4ed8",
+                    fontSize: "0.8rem",
+                    fontWeight: 600,
+                    marginTop: 6,
+                  }}
+                >
+                  Standard check-in is after 2:00 PM and check-out is before
+                  12:00 PM.
                 </div>
               </div>
               <button

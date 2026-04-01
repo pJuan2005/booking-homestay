@@ -383,7 +383,7 @@ export default function MyPropertiesPage() {
                   )}
 
                   <div style={{ display: "flex", gap: 8 }}>
-                    <Link href={`/listings/${property.id}`} style={{ flex: 1 }}>
+                    <Link href={`/host/properties/${property.id}`} style={{ flex: 1 }}>
                       <button
                         style={{
                           width: "100%",

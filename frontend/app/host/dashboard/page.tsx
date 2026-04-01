@@ -382,14 +382,19 @@ export default function HostDashboardPage() {
                 </div>
               ) : dashboard?.properties.length ? (
                 dashboard.properties.map((property) => (
-                  <div
+                  <Link
                     key={property.id}
+                    href={`/host/properties/${property.id}`}
+                    style={{ textDecoration: "none" }}
+                  >
+                    <div
                     style={{
                       padding: "12px 18px",
                       borderBottom: "1px solid #f1f5f9",
                       display: "flex",
                       alignItems: "center",
                       gap: 10,
+                      cursor: "pointer",
                     }}
                   >
                     <Image
@@ -434,7 +439,8 @@ export default function HostDashboardPage() {
                       </div>
                     </div>
                     <StatusBadge status={property.status} />
-                  </div>
+                    </div>
+                  </Link>
                 ))
               ) : (
                 <div style={{ padding: "24px 18px", color: "#94a3b8", fontSize: "0.84rem" }}>

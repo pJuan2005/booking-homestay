@@ -378,7 +378,7 @@ export default function ManagePropertiesPage() {
                     </td>
                     <td>
                       <div style={{ display: "flex", gap: 6 }}>
-                        <Link href={`/listings/${property.id}`}>
+                        <Link href={`/admin/properties/${property.id}`}>
                           <button
                             style={{
                               padding: "6px 9px",
