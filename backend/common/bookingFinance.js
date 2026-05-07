@@ -7,9 +7,14 @@ function getDefaultUsdToVndRate() {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 25000;
 }
 
-function getDefaultPlatformCommissionRate() {
+function getDefaultOnlineCommissionRate() {
   const parsed = Number(process.env.PLATFORM_COMMISSION_RATE || 0.1);
   return Number.isFinite(parsed) && parsed >= 0 && parsed < 1 ? parsed : 0.1;
+}
+
+function getDefaultDirectCommissionRate() {
+  const parsed = Number(process.env.DIRECT_COMMISSION_RATE || 0.05);
+  return Number.isFinite(parsed) && parsed >= 0 && parsed < 1 ? parsed : 0.05;
 }
 
 function normalizeUsdToVndRate(value) {
@@ -19,11 +24,15 @@ function normalizeUsdToVndRate(value) {
     : getDefaultUsdToVndRate();
 }
 
-function normalizePlatformCommissionRate(value) {
+function normalizeCommissionRate(value, fallback = getDefaultOnlineCommissionRate()) {
   const parsed = Number(value);
   return Number.isFinite(parsed) && parsed >= 0 && parsed < 1
     ? Number(parsed.toFixed(4))
-    : getDefaultPlatformCommissionRate();
+    : fallback;
+}
+
+function normalizePlatformCommissionRate(value) {
+  return normalizeCommissionRate(value, getDefaultOnlineCommissionRate());
 }
 
 function convertUsdToVnd(amountUsd, exchangeRate = getDefaultUsdToVndRate()) {
@@ -32,11 +41,10 @@ function convertUsdToVnd(amountUsd, exchangeRate = getDefaultUsdToVndRate()) {
 
 function calculateRevenueSplit(
   grossRevenue,
-  commissionRate = getDefaultPlatformCommissionRate(),
+  commissionRate = getDefaultOnlineCommissionRate(),
 ) {
   const gross = normalizeMoney(grossRevenue);
-  const normalizedCommissionRate =
-    normalizePlatformCommissionRate(commissionRate);
+  const normalizedCommissionRate = normalizeCommissionRate(commissionRate);
   const platformRevenue = normalizeMoney(gross * normalizedCommissionRate);
   const hostPayout = normalizeMoney(gross - platformRevenue);
 
@@ -48,10 +56,36 @@ function calculateRevenueSplit(
   };
 }
 
+function resolveRevenueSplitForRow(row, fallbackCommissionRate) {
+  const grossRevenue = normalizeMoney(row?.totalPrice || 0);
+  const commissionAmount = Number(row?.commissionAmount);
+  const hostPayoutAmount = Number(row?.hostPayoutAmount);
+
+  if (Number.isFinite(commissionAmount) && Number.isFinite(hostPayoutAmount)) {
+    const gross = normalizeMoney(commissionAmount + hostPayoutAmount);
+    const rate =
+      gross > 0 ? Number((commissionAmount / gross).toFixed(4)) : normalizeCommissionRate(fallbackCommissionRate);
+
+    return {
+      grossRevenue: gross,
+      platformCommissionRate: rate,
+      platformRevenue: normalizeMoney(commissionAmount),
+      hostPayout: normalizeMoney(hostPayoutAmount),
+    };
+  }
+
+  const commissionRate = normalizeCommissionRate(
+    row?.commissionRateApplied,
+    normalizeCommissionRate(fallbackCommissionRate),
+  );
+
+  return calculateRevenueSplit(grossRevenue, commissionRate);
+}
+
 function calculateRevenueTotals(rows, commissionRate) {
   return (Array.isArray(rows) ? rows : []).reduce(
     (totals, row) => {
-      const split = calculateRevenueSplit(row?.totalPrice, commissionRate);
+      const split = resolveRevenueSplitForRow(row, commissionRate);
       totals.grossRevenue = normalizeMoney(totals.grossRevenue + split.grossRevenue);
       totals.platformRevenue = normalizeMoney(
         totals.platformRevenue + split.platformRevenue,
@@ -64,7 +98,7 @@ function calculateRevenueTotals(rows, commissionRate) {
       grossRevenue: 0,
       platformRevenue: 0,
       hostPayout: 0,
-      platformCommissionRate: normalizePlatformCommissionRate(commissionRate),
+      platformCommissionRate: normalizeCommissionRate(commissionRate),
     },
   );
 }
@@ -72,10 +106,14 @@ function calculateRevenueTotals(rows, commissionRate) {
 module.exports = {
   normalizeMoney,
   getDefaultUsdToVndRate,
-  getDefaultPlatformCommissionRate,
+  getDefaultOnlineCommissionRate,
+  getDefaultDirectCommissionRate,
+  getDefaultPlatformCommissionRate: getDefaultOnlineCommissionRate,
   normalizeUsdToVndRate,
+  normalizeCommissionRate,
   normalizePlatformCommissionRate,
   convertUsdToVnd,
   calculateRevenueSplit,
+  resolveRevenueSplitForRow,
   calculateRevenueTotals,
 };

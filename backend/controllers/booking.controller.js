@@ -2,6 +2,7 @@ const Booking = require("../models/booking.model");
 const { buildPaymentInfo } = require("../common/paymentConfig");
 const { savePaymentProof } = require("../common/bookingUpload");
 const { removeManagedFile } = require("../common/propertyUpload");
+const { calculateRevenueSplit } = require("../common/bookingFinance");
 const PlatformSetting = require("../models/platform-setting.model");
 
 function parseInteger(value, fallback = 0) {
@@ -130,20 +131,33 @@ exports.createBooking = async (req, res) => {
     }
 
     const subtotal = property.pricePerNight * nights;
-    const totalPrice = Number(subtotal.toFixed(2));
+    const platformSettings = await PlatformSetting.getPlatformSettings();
+    const commissionRate =
+      platformSettings.onlineCommissionRate ??
+      platformSettings.platformCommissionRate;
+    const revenueSplit = calculateRevenueSplit(subtotal, commissionRate);
 
     const bookingId = await Booking.create({
       propertyId,
       guestId,
+      guestNameSnapshot:
+        req.currentUser?.full_name || req.currentUser?.fullName || null,
+      guestPhoneSnapshot: req.currentUser?.phone || null,
       checkIn: normalizedCheckIn,
       checkOut: normalizedCheckOut,
       nights,
       guests,
-      totalPrice,
+      totalPrice: revenueSplit.grossRevenue,
+      source: "guest_online",
+      createdBy: guestId,
+      paymentMethod: "bank_transfer",
+      paymentStatus: "unpaid",
+      commissionRateApplied: revenueSplit.platformCommissionRate,
+      commissionAmount: revenueSplit.platformRevenue,
+      hostPayoutAmount: revenueSplit.hostPayout,
     });
 
     const booking = await Booking.getGuestById(bookingId, guestId);
-    const platformSettings = await PlatformSetting.getPlatformSettings();
 
     return res.status(201).json({
       message:

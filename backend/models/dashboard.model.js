@@ -1,9 +1,9 @@
 const db = require("../common/db");
 const { buildVariantUrl } = require("../common/propertyUpload");
 const {
-  calculateRevenueSplit,
   calculateRevenueTotals,
   normalizeMoney,
+  resolveRevenueSplitForRow,
 } = require("../common/bookingFinance");
 const PlatformSetting = require("./platform-setting.model");
 
@@ -60,6 +60,10 @@ async function getConfirmedRevenueRows(query, params) {
 
   return rows.map((row) => ({
     totalPrice: toNumber(row.totalPrice),
+    commissionRateApplied: Number(row.commissionRateApplied || 0),
+    commissionAmount: toNumber(row.commissionAmount),
+    hostPayoutAmount: toNumber(row.hostPayoutAmount),
+    source: row.source || "guest_online",
   }));
 }
 
@@ -82,7 +86,7 @@ function buildRevenueMapByMonth(rows, commissionRate) {
     }
 
     const currentTotals = totalsByMonth.get(period) || createEmptyMonthlyTotals();
-    const split = calculateRevenueSplit(row.totalPrice, commissionRate);
+    const split = resolveRevenueSplitForRow(row, commissionRate);
 
     currentTotals.grossRevenue = normalizeMoney(
       currentTotals.grossRevenue + split.grossRevenue,
@@ -155,7 +159,12 @@ async function getHostSummary(hostId, platformSettings) {
   const bookingSummary = bookingResult[0]?.[0] || {};
   const reviewSummary = reviewResult[0]?.[0] || {};
   const revenueRows = await getConfirmedRevenueRows(
-    `SELECT b.total_price AS totalPrice
+    `SELECT
+      b.total_price AS totalPrice,
+      b.commission_rate_applied AS commissionRateApplied,
+      b.commission_amount AS commissionAmount,
+      b.host_payout_amount AS hostPayoutAmount,
+      b.source AS source
      FROM bookings b
      JOIN properties p ON p.id = b.property_id
      WHERE p.host_id = ?
@@ -187,7 +196,7 @@ async function getHostRecentBookings(hostId, limit = 5) {
   const [rows] = await db.promise().query(
     `SELECT
       b.id,
-      guest.full_name AS guestName,
+      COALESCE(guest.full_name, b.guest_name_snapshot, 'Walk-in Guest') AS guestName,
       b.guests,
       p.title AS propertyTitle,
       DATE_FORMAT(b.check_in, '%Y-%m-%d') AS checkIn,
@@ -196,7 +205,7 @@ async function getHostRecentBookings(hostId, limit = 5) {
       b.status
      FROM bookings b
      JOIN properties p ON p.id = b.property_id
-     JOIN users guest ON guest.id = b.guest_id
+     LEFT JOIN users guest ON guest.id = b.guest_id
      WHERE p.host_id = ?
        AND p.is_deleted = 0
      ORDER BY b.created_at DESC, b.id DESC
@@ -277,7 +286,12 @@ async function getAdminSummary(platformSettings) {
   const propertySummary = propertyResult[0]?.[0] || {};
   const bookingSummary = bookingResult[0]?.[0] || {};
   const revenueRows = await getConfirmedRevenueRows(
-    `SELECT total_price AS totalPrice
+    `SELECT
+      total_price AS totalPrice,
+      commission_rate_applied AS commissionRateApplied,
+      commission_amount AS commissionAmount,
+      host_payout_amount AS hostPayoutAmount,
+      source
      FROM bookings
      WHERE status = 'confirmed'`,
     [],
@@ -314,7 +328,11 @@ async function getMonthlyPerformance(platformSettings, monthCount = 7) {
   const [rows] = await db.promise().query(
     `SELECT
       DATE_FORMAT(check_in, '%Y-%m-01') AS period,
-      total_price AS totalPrice
+      total_price AS totalPrice,
+      commission_rate_applied AS commissionRateApplied,
+      commission_amount AS commissionAmount,
+      host_payout_amount AS hostPayoutAmount,
+      source
      FROM bookings
      WHERE status = 'confirmed'
        AND check_in >= ?
@@ -332,13 +350,13 @@ async function getRecentBookings(limit = 6) {
   const [rows] = await db.promise().query(
     `SELECT
       b.id,
-      guest.full_name AS guestName,
+      COALESCE(guest.full_name, b.guest_name_snapshot, 'Walk-in Guest') AS guestName,
       DATE_FORMAT(b.check_in, '%Y-%m-%d') AS checkIn,
       DATE_FORMAT(b.check_out, '%Y-%m-%d') AS checkOut,
       b.total_price AS totalPrice,
       b.status
      FROM bookings b
-     JOIN users guest ON guest.id = b.guest_id
+     LEFT JOIN users guest ON guest.id = b.guest_id
      JOIN properties p ON p.id = b.property_id
      WHERE p.is_deleted = 0
      ORDER BY b.created_at DESC, b.id DESC
@@ -407,7 +425,11 @@ async function getTopHosts(platformSettings, limit = 5) {
   const [revenueRows] = await db.promise().query(
     `SELECT
       p.host_id AS hostId,
-      b.total_price AS totalPrice
+      b.total_price AS totalPrice,
+      b.commission_rate_applied AS commissionRateApplied,
+      b.commission_amount AS commissionAmount,
+      b.host_payout_amount AS hostPayoutAmount,
+      b.source AS source
      FROM bookings b
      JOIN properties p
        ON p.id = b.property_id
@@ -424,8 +446,8 @@ async function getTopHosts(platformSettings, limit = 5) {
       platformRevenue: 0,
       hostPayout: 0,
     };
-    const split = calculateRevenueSplit(
-      row.totalPrice,
+    const split = resolveRevenueSplitForRow(
+      row,
       platformSettings.platformCommissionRate,
     );
 

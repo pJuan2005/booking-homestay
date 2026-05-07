@@ -129,6 +129,15 @@ INSERT INTO properties (
 (13, 2, 'Pearl Beachfront Apartment', 'Bright beachfront apartment with contemporary finishes, fast WiFi, and a panoramic sea facing lounge.', 'Apartment', 185.00, '22 Pham Van Dong', 'Da Nang', 'Vietnam', 4, 2, 2, 'approved', '/uploads/properties/13/cover/kelcie-papp-Gk0MAP8A7Cw-unsplash.jpg', 0, 0),
 (14, 3, 'Heritage Courtyard Home', 'Heritage style home in the old town with a peaceful courtyard, breakfast service, and artisan decor details.', 'House', 170.00, '14 Nguyen Thai Hoc', 'Hoi An', 'Vietnam', 5, 2, 2, 'approved', '/uploads/properties/14/cover/lusia-komala-widiastuti-HStcPpySmxI-unsplash.jpg', 0, 0);
 
+UPDATE properties
+SET
+  manage_token = COALESCE(
+    NULLIF(manage_token, ''),
+    LOWER(SHA2(CONCAT('quick-manage-property-', id), 256))
+  ),
+  manage_token_active = 1
+WHERE manage_token IS NULL OR manage_token = '' OR manage_token_active IS NULL;
+
 INSERT INTO property_images (property_id, image_url) VALUES
 (1, '/uploads/properties/1/details/adam-winger-b87_egH5mos-unsplash.jpg'),
 (1, '/uploads/properties/1/details/adrian-schwarz--QQwV-lU2_4-unsplash.jpg'),

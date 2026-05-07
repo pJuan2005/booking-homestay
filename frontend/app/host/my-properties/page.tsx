@@ -11,6 +11,7 @@ import {
   MapPin,
   Eye,
   AlertTriangle,
+  ExternalLink,
 } from "lucide-react";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { PaginationControls } from "@/components/shared/PaginationControls";
@@ -479,6 +480,38 @@ export default function MyPropertiesPage() {
                       </button>
                     )}
                   </div>
+
+                  {property.status === "approved" &&
+                    property.manageToken &&
+                    property.manageTokenActive && (
+                    <div style={{ marginTop: 10 }}>
+                      <Link
+                        href={`/quick-manage/${property.manageToken}`}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        <button
+                          style={{
+                            width: "100%",
+                            background: "#f8fafc",
+                            border: "1px dashed #93c5fd",
+                            borderRadius: 8,
+                            padding: "8px 12px",
+                            fontSize: "0.8rem",
+                            color: "#1d4ed8",
+                            fontWeight: 700,
+                            cursor: "pointer",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            gap: 6,
+                          }}
+                        >
+                          <ExternalLink size={13} /> Quick Manage Link
+                        </button>
+                      </Link>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>

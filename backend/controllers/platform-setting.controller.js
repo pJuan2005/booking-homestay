@@ -1,18 +1,30 @@
 const PlatformSetting = require("../models/platform-setting.model");
 const {
-  normalizePlatformCommissionRate,
+  normalizeCommissionRate,
   normalizeUsdToVndRate,
 } = require("../common/bookingFinance");
 
 function mapSettingsResponse(settings) {
-  const platformCommissionRate = normalizePlatformCommissionRate(
-    settings.platformCommissionRate,
+  const onlineCommissionRate = normalizeCommissionRate(
+    settings.onlineCommissionRate ?? settings.platformCommissionRate,
+  );
+  const directCommissionRate = normalizeCommissionRate(
+    settings.directCommissionRate,
+    0.05,
   );
 
   return {
     usdToVndRate: normalizeUsdToVndRate(settings.usdToVndRate),
-    platformCommissionRate,
-    platformCommissionPercent: Number((platformCommissionRate * 100).toFixed(2)),
+    onlineCommissionRate,
+    directCommissionRate,
+    platformCommissionRate: onlineCommissionRate,
+    onlineCommissionPercent: Number((onlineCommissionRate * 100).toFixed(2)),
+    directCommissionPercent: Number((directCommissionRate * 100).toFixed(2)),
+    platformCommissionPercent: Number((onlineCommissionRate * 100).toFixed(2)),
+    paymentBankCode: String(settings.paymentBankCode || ""),
+    paymentBankName: String(settings.paymentBankName || ""),
+    paymentAccountNumber: String(settings.paymentAccountNumber || ""),
+    paymentAccountName: String(settings.paymentAccountName || ""),
   };
 }
 
@@ -32,7 +44,14 @@ exports.getAdminPlatformSettings = async (_req, res) => {
 
 exports.updateAdminPlatformSettings = async (req, res) => {
   const usdToVndRate = Number(req.body.usdToVndRate);
-  const platformCommissionPercent = Number(req.body.platformCommissionPercent);
+  const onlineCommissionPercent = Number(
+    req.body.onlineCommissionPercent ?? req.body.platformCommissionPercent,
+  );
+  const directCommissionPercent = Number(req.body.directCommissionPercent);
+  const paymentBankCode = String(req.body.paymentBankCode || "").trim();
+  const paymentBankName = String(req.body.paymentBankName || "").trim();
+  const paymentAccountNumber = String(req.body.paymentAccountNumber || "").trim();
+  const paymentAccountName = String(req.body.paymentAccountName || "").trim();
 
   if (!Number.isFinite(usdToVndRate) || usdToVndRate <= 0) {
     return res.status(400).json({
@@ -41,19 +60,58 @@ exports.updateAdminPlatformSettings = async (req, res) => {
   }
 
   if (
-    !Number.isFinite(platformCommissionPercent) ||
-    platformCommissionPercent < 0 ||
-    platformCommissionPercent >= 100
+    !Number.isFinite(onlineCommissionPercent) ||
+    onlineCommissionPercent < 0 ||
+    onlineCommissionPercent >= 100
   ) {
     return res.status(400).json({
-      message: "Platform commission must be between 0 and 99.99 percent.",
+      message: "Online commission must be between 0 and 99.99 percent.",
+    });
+  }
+
+  if (
+    !Number.isFinite(directCommissionPercent) ||
+    directCommissionPercent < 0 ||
+    directCommissionPercent >= 100
+  ) {
+    return res.status(400).json({
+      message: "Direct booking commission must be between 0 and 99.99 percent.",
+    });
+  }
+
+  if (!paymentBankCode) {
+    return res.status(400).json({
+      message: "Please provide the payment bank code for VietQR generation.",
+    });
+  }
+
+  if (!paymentBankName) {
+    return res.status(400).json({
+      message: "Please provide the payment bank name.",
+    });
+  }
+
+  if (!paymentAccountNumber) {
+    return res.status(400).json({
+      message: "Please provide the payment account number.",
+    });
+  }
+
+  if (!paymentAccountName) {
+    return res.status(400).json({
+      message: "Please provide the payment account name.",
     });
   }
 
   try {
     const settings = await PlatformSetting.updatePlatformSettings({
       usdToVndRate,
-      platformCommissionRate: platformCommissionPercent / 100,
+      onlineCommissionRate: onlineCommissionPercent / 100,
+      directCommissionRate: directCommissionPercent / 100,
+      paymentBankCode,
+      paymentBankName,
+      paymentAccountNumber,
+      paymentAccountName,
     });
 
     return res.json({

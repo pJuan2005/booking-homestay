@@ -18,14 +18,48 @@ import {
   type HostDashboardData,
 } from "@/services/dashboardService";
 import { isBackendUploadImage } from "@/lib/image";
+import { getHostProperties, type PropertySummary } from "@/services/propertyService";
 
 function formatCurrency(value: number) {
   return `$${value.toLocaleString()}`;
 }
 
+function getQuickManageUrl(token: string) {
+  if (typeof window === "undefined") {
+    return `/quick-manage/${token}`;
+  }
+
+  return `${window.location.origin}/quick-manage/${token}`;
+}
+
+function downloadExcelCompatibleCsv(rows: string[][], filename: string) {
+  const escapeCell = (value: string) => {
+    const normalized = String(value ?? "");
+    if (/[",\n]/.test(normalized)) {
+      return `"${normalized.replace(/"/g, '""')}"`;
+    }
+
+    return normalized;
+  };
+
+  const content = rows.map((row) => row.map(escapeCell).join(",")).join("\r\n");
+  const blob = new Blob([`\uFEFF${content}`], {
+    type: "text/csv;charset=utf-8;",
+  });
+  const objectUrl = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = objectUrl;
+  anchor.download = filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  document.body.removeChild(anchor);
+  URL.revokeObjectURL(objectUrl);
+}
+
 export default function HostDashboardPage() {
   const { user, isInitializing } = useAuth();
   const [dashboard, setDashboard] = useState<HostDashboardData | null>(null);
+  const [hostProperties, setHostProperties] = useState<PropertySummary[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [pageError, setPageError] = useState("");
 
@@ -34,13 +68,19 @@ export default function HostDashboardPage() {
       return;
     }
 
+    const hostUser = user;
+
     async function loadDashboard() {
       setIsLoading(true);
       setPageError("");
 
       try {
-        const data = await getHostDashboard();
+        const [data, properties] = await Promise.all([
+          getHostDashboard(),
+          getHostProperties(hostUser.id),
+        ]);
         setDashboard(data);
+        setHostProperties(properties);
       } catch (error) {
         setPageError(
           error instanceof Error
@@ -87,6 +127,32 @@ export default function HostDashboardPage() {
     averageRating: 0,
   };
 
+  const exportableQuickLinks = hostProperties.filter(
+    (property) =>
+      property.status === "approved" &&
+      property.manageToken &&
+      property.manageTokenActive,
+  );
+
+  function handleExportQuickLinks() {
+    const rows = [
+      [
+        "Property ID",
+        "Property Title",
+        "Location",
+        "Quick Link URL",
+      ],
+      ...exportableQuickLinks.map((property) => [
+        String(property.id),
+        property.title,
+        property.location,
+        getQuickManageUrl(property.manageToken || ""),
+      ]),
+    ];
+
+    downloadExcelCompatibleCsv(rows, "host-quick-manage-links.csv");
+  }
+
   const stats = [
     {
       icon: <Building2 size={22} color="#2563EB" />,
@@ -120,20 +186,54 @@ export default function HostDashboardPage() {
 
   return (
     <div style={{ padding: "28px" }}>
-      <div style={{ marginBottom: 28 }}>
-        <h1
+      <div
+        style={{
+          marginBottom: 28,
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "flex-start",
+          gap: 12,
+          flexWrap: "wrap",
+        }}
+      >
+        <div>
+          <h1
+            style={{
+              fontWeight: 800,
+              color: "#1e293b",
+              marginBottom: 4,
+              fontSize: "1.5rem",
+            }}
+          >
+            Welcome back, {firstName}
+          </h1>
+          <p style={{ color: "#64748b", margin: 0 }}>
+            Here is a live overview of your hosting activity.
+          </p>
+        </div>
+
+        <div
           style={{
-            fontWeight: 800,
-            color: "#1e293b",
-            marginBottom: 4,
-            fontSize: "1.5rem",
+            display: "flex",
+            gap: 10,
+            flexWrap: "wrap",
+            alignItems: "center",
+            marginLeft: "auto",
           }}
         >
-          Welcome back, {firstName}
-        </h1>
-        <p style={{ color: "#64748b", margin: 0 }}>
-          Here is a live overview of your hosting activity.
-        </p>
+          <Link href="/host/my-properties">
+            <button className="btn-outline-hs">Manage Quick Links</button>
+          </Link>
+          <button
+            type="button"
+            onClick={handleExportQuickLinks}
+            className="btn-primary-hs"
+            style={{ opacity: exportableQuickLinks.length ? 1 : 0.6 }}
+            disabled={!exportableQuickLinks.length}
+          >
+            Export Quick Links
+          </button>
+        </div>
       </div>
 
       {pageError && (

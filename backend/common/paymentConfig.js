@@ -11,14 +11,21 @@ const DEFAULT_PAYMENT_CONFIG = {
   accountName: process.env.PAYMENT_ACCOUNT_NAME || "PHAM XUAN CHUAN",
 };
 
-function getPaymentConfig() {
+function getPaymentConfig(platformSettings = {}) {
   return {
-    ...DEFAULT_PAYMENT_CONFIG,
+    bankCode: String(platformSettings.paymentBankCode || DEFAULT_PAYMENT_CONFIG.bankCode),
+    bankName: String(platformSettings.paymentBankName || DEFAULT_PAYMENT_CONFIG.bankName),
+    accountNumber: String(
+      platformSettings.paymentAccountNumber || DEFAULT_PAYMENT_CONFIG.accountNumber,
+    ),
+    accountName: String(
+      platformSettings.paymentAccountName || DEFAULT_PAYMENT_CONFIG.accountName,
+    ),
   };
 }
 
 function buildPaymentInfo(booking, platformSettings = {}) {
-  const config = getPaymentConfig();
+  const config = getPaymentConfig(platformSettings);
   const amountUsd = Number(booking.totalPrice || 0);
   const exchangeRate = normalizeUsdToVndRate(
     platformSettings.usdToVndRate || getDefaultUsdToVndRate(),

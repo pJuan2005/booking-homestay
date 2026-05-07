@@ -15,6 +15,8 @@ router.use(requireRoles("host"));
 router.get("/", property.getHostProperties);
 router.get("/:id", property.getHostPropertyById);
 router.post("/", uploadFields, property.createHostProperty);
+router.post("/:id/manage-link/regenerate", property.regenerateHostManageLink);
+router.put("/:id/manage-link/status", property.updateHostManageLinkState);
 router.put("/:id", uploadFields, property.updateHostProperty);
 router.delete("/:id", property.deleteHostProperty);
 

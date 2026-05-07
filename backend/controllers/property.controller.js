@@ -648,3 +648,167 @@ exports.updatePropertyStatus = async (req, res) => {
     });
   }
 };
+
+exports.regenerateHostManageLink = async (req, res) => {
+  const hostId = getHostId(req);
+  if (!hostId) {
+    return res.status(400).json({
+      message: "A valid hostId is required.",
+    });
+  }
+
+  try {
+    const property = await Property.getHostById(req.params.id, hostId);
+    if (!property) {
+      return res.status(404).json({
+        message: "Host property not found.",
+      });
+    }
+
+    if (String(property.status).toLowerCase() !== "approved") {
+      return res.status(400).json({
+        message: "Quick management links are only available after admin approval.",
+      });
+    }
+
+    const manageToken = await Property.regenerateManageToken(req.params.id, hostId);
+    if (!manageToken) {
+      return res.status(404).json({
+        message: "Host property not found.",
+      });
+    }
+
+    return res.json({
+      message: "Quick management link regenerated successfully.",
+      data: {
+        id: Number(req.params.id),
+        manageToken,
+        manageTokenActive: true,
+      },
+    });
+  } catch (_error) {
+    return res.status(500).json({
+      message: "Unable to regenerate the quick management link.",
+    });
+  }
+};
+
+exports.updateHostManageLinkState = async (req, res) => {
+  const hostId = getHostId(req);
+  if (!hostId) {
+    return res.status(400).json({
+      message: "A valid hostId is required.",
+    });
+  }
+
+  const isActive = req.body.isActive;
+  if (typeof isActive !== "boolean") {
+    return res.status(400).json({
+      message: "isActive must be provided as a boolean value.",
+    });
+  }
+
+  try {
+    const property = await Property.getHostById(req.params.id, hostId);
+    if (!property) {
+      return res.status(404).json({
+        message: "Host property not found.",
+      });
+    }
+
+    const updated = await Property.setManageTokenActive(req.params.id, isActive, hostId);
+    if (!updated) {
+      return res.status(404).json({
+        message: "Host property not found.",
+      });
+    }
+
+    return res.json({
+      message: `Quick management link ${isActive ? "enabled" : "disabled"} successfully.`,
+      data: {
+        id: Number(req.params.id),
+        manageToken: property.manageToken || "",
+        manageTokenActive: isActive,
+      },
+    });
+  } catch (_error) {
+    return res.status(500).json({
+      message: "Unable to update the quick management link status.",
+    });
+  }
+};
+
+exports.regenerateAdminManageLink = async (req, res) => {
+  try {
+    const property = await Property.getAdminById(req.params.id);
+    if (!property) {
+      return res.status(404).json({
+        message: "Property not found.",
+      });
+    }
+
+    if (String(property.status).toLowerCase() !== "approved") {
+      return res.status(400).json({
+        message: "Quick management links are only available after admin approval.",
+      });
+    }
+
+    const manageToken = await Property.regenerateManageToken(req.params.id);
+    if (!manageToken) {
+      return res.status(404).json({
+        message: "Property not found.",
+      });
+    }
+
+    return res.json({
+      message: "Quick management link regenerated successfully.",
+      data: {
+        id: Number(req.params.id),
+        manageToken,
+        manageTokenActive: true,
+      },
+    });
+  } catch (_error) {
+    return res.status(500).json({
+      message: "Unable to regenerate the quick management link.",
+    });
+  }
+};
+
+exports.updateAdminManageLinkState = async (req, res) => {
+  const isActive = req.body.isActive;
+  if (typeof isActive !== "boolean") {
+    return res.status(400).json({
+      message: "isActive must be provided as a boolean value.",
+    });
+  }
+
+  try {
+    const property = await Property.getAdminById(req.params.id);
+    if (!property) {
+      return res.status(404).json({
+        message: "Property not found.",
+      });
+    }
+
+    const updated = await Property.setManageTokenActive(req.params.id, isActive);
+    if (!updated) {
+      return res.status(404).json({
+        message: "Property not found.",
+      });
+    }
+
+    return res.json({
+      message: `Quick management link ${isActive ? "enabled" : "disabled"} successfully.`,
+      data: {
+        id: Number(req.params.id),
+        manageToken: property.manageToken || "",
+        manageTokenActive: isActive,
+      },
+    });
+  } catch (_error) {
+    return res.status(500).json({
+      message: "Unable to update the quick management link status.",
+    });
+  }
+};

@@ -22,9 +22,10 @@ export interface BookingRecord {
   propertyTitle: string;
   propertyLocation: string;
   propertyImage: string;
-  guestId: number;
+  guestId: number | null;
   guestName: string;
   guestEmail: string;
+  guestPhone: string;
   hostId: number;
   hostName: string;
   checkIn: string;
@@ -33,6 +34,8 @@ export interface BookingRecord {
   guests: number;
   totalPrice: number;
   status: "pending" | "confirmed" | "cancelled";
+  source: string;
+  createdBy: number | null;
   paymentMethod: string;
   paymentReference: string;
   paymentStatus: "unpaid" | "proof_uploaded" | "verified" | "rejected";
@@ -44,6 +47,9 @@ export interface BookingRecord {
   rejectionReason: string;
   hostNote: string;
   checkinInstructions: string;
+  commissionRateApplied: number;
+  commissionAmount: number;
+  hostPayoutAmount: number;
   reviewId: number | null;
   reviewRating: number | null;
   reviewCreatedAt: string | null;
@@ -59,9 +65,13 @@ function mapBooking(record: any): BookingRecord {
     propertyTitle: String(record.propertyTitle || ""),
     propertyLocation: String(record.propertyLocation || ""),
     propertyImage: buildAssetUrl(record.propertyImage || ""),
-    guestId: Number(record.guestId),
+    guestId:
+      record.guestId === null || record.guestId === undefined
+        ? null
+        : Number(record.guestId),
     guestName: String(record.guestName || ""),
     guestEmail: String(record.guestEmail || ""),
+    guestPhone: String(record.guestPhone || ""),
     hostId: Number(record.hostId),
     hostName: String(record.hostName || ""),
     checkIn: String(record.checkIn || ""),
@@ -70,6 +80,11 @@ function mapBooking(record: any): BookingRecord {
     guests: Number(record.guests || 0),
     totalPrice: Number(record.totalPrice || 0),
     status: String(record.status || "pending").toLowerCase() as BookingRecord["status"],
+    source: String(record.source || "guest_online"),
+    createdBy:
+      record.createdBy === null || record.createdBy === undefined
+        ? null
+        : Number(record.createdBy),
     paymentMethod: String(record.paymentMethod || "bank_transfer"),
     paymentReference: String(record.paymentReference || ""),
     paymentStatus: String(record.paymentStatus || "unpaid").toLowerCase() as BookingRecord["paymentStatus"],
@@ -84,6 +99,9 @@ function mapBooking(record: any): BookingRecord {
     rejectionReason: String(record.rejectionReason || ""),
     hostNote: String(record.hostNote || ""),
     checkinInstructions: String(record.checkinInstructions || ""),
+    commissionRateApplied: Number(record.commissionRateApplied || 0),
+    commissionAmount: Number(record.commissionAmount || 0),
+    hostPayoutAmount: Number(record.hostPayoutAmount || 0),
     reviewId:
       record.reviewId === null || record.reviewId === undefined
         ? null

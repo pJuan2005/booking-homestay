@@ -251,6 +251,34 @@ export function InternalPropertyPreview({
           <Link href={getEditHref(mode, property.id)}>
             <button className="btn-primary-hs">Edit Property</button>
           </Link>
+          {mode === "host" &&
+            property.status === "approved" &&
+            property.manageToken &&
+            property.manageTokenActive && (
+            <Link
+              href={`/quick-manage/${property.manageToken}`}
+              target="_blank"
+              rel="noreferrer"
+            >
+              <button
+                style={{
+                  padding: "10px 16px",
+                  borderRadius: 10,
+                  border: "1px dashed #93c5fd",
+                  background: "#f8fafc",
+                  color: "#1d4ed8",
+                  fontWeight: 700,
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 6,
+                  cursor: "pointer",
+                }}
+              >
+                <ExternalLink size={15} />
+                Quick Manage
+              </button>
+            </Link>
+          )}
           {property.status === "approved" && (
             <Link href={`/listings/${property.id}`}>
               <button

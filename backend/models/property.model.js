@@ -1,4 +1,5 @@
 const db = require("../common/db");
+const crypto = require("crypto");
 const { buildVariantUrl } = require("../common/propertyUpload");
 
 const Property = {};
@@ -60,8 +61,12 @@ function buildPublicPropertyWhereClause(filters = {}) {
   };
 }
 
-function mapPropertySummaryRow(row) {
-  return {
+function createManageToken() {
+  return crypto.randomBytes(24).toString("hex");
+}
+
+function mapPropertySummaryRow(row, options = {}) {
+  const summary = {
     id: Number(row.id),
     hostId: Number(row.hostId),
     title: row.title,
@@ -81,6 +86,14 @@ function mapPropertySummaryRow(row) {
     reviews: Number(row.reviews || 0),
     rating: Number(row.rating || 0),
   };
+
+  if (options.includeManageAccess) {
+    summary.manageToken = row.manageToken || "";
+    summary.manageTokenActive = Boolean(row.manageTokenActive);
+    summary.manageTokenExpiresAt = row.manageTokenExpiresAt || null;
+  }
+
+  return summary;
 }
 
 async function getAmenities(propertyId) {
@@ -135,7 +148,7 @@ async function getReviewList(propertyId) {
   }));
 }
 
-async function buildPropertyDetail(row) {
+async function buildPropertyDetail(row, options = {}) {
   const [amenities, imageRows, reviews] = await Promise.all([
     getAmenities(row.id),
     getImageList(row.id),
@@ -144,7 +157,7 @@ async function buildPropertyDetail(row) {
 
   const images = imageRows.map((imageRow) => imageRow.url);
 
-  return {
+  const detail = {
     id: Number(row.id),
     hostId: Number(row.host_id),
     title: row.title,
@@ -170,9 +183,17 @@ async function buildPropertyDetail(row) {
     featured: Boolean(row.featured),
     hostName: row.hostName,
   };
+
+  if (options.includeManageAccess) {
+    detail.manageToken = row.manage_token || "";
+    detail.manageTokenActive = Boolean(row.manage_token_active);
+    detail.manageTokenExpiresAt = row.manage_token_expires_at || null;
+  }
+
+  return detail;
 }
 
-async function getPropertyDetail(whereClause, params) {
+async function getPropertyDetail(whereClause, params, options = {}) {
   const [rows] = await db.promise().query(
     `SELECT
       p.*,
@@ -191,10 +212,17 @@ async function getPropertyDetail(whereClause, params) {
     return null;
   }
 
-  return buildPropertyDetail(rows[0]);
+  return buildPropertyDetail(rows[0], options);
 }
 
-async function getPropertyList(whereClause, params = []) {
+async function getPropertyList(whereClause, params = [], options = {}) {
+  const manageFields = options.includeManageAccess
+    ? `,
+      p.manage_token AS manageToken,
+      p.manage_token_active AS manageTokenActive,
+      p.manage_token_expires_at AS manageTokenExpiresAt`
+    : "";
+
   const [rows] = await db.promise().query(
     `SELECT
       p.id,
@@ -212,6 +240,9 @@ async function getPropertyList(whereClause, params = []) {
       p.status,
       p.cover_image AS image,
       p.featured,
+      ${options.includeManageAccess ? "p.manage_token AS manageToken," : ""}
+      ${options.includeManageAccess ? "p.manage_token_active AS manageTokenActive," : ""}
+      ${options.includeManageAccess ? "p.manage_token_expires_at AS manageTokenExpiresAt," : ""}
       u.full_name AS hostName,
       COUNT(r.id) AS reviews,
       COALESCE(AVG(r.rating), 0) AS rating
@@ -224,7 +255,7 @@ async function getPropertyList(whereClause, params = []) {
     params,
   );
 
-  return rows.map(mapPropertySummaryRow);
+  return rows.map((row) => mapPropertySummaryRow(row, options));
 }
 
 Property.getAll = async (filters = {}) => {
@@ -341,18 +372,28 @@ Property.getUnavailableDateRanges = async (id) => {
   };
 };
 
-Property.getAllAdmin = async () => getPropertyList("p.is_deleted = 0");
+Property.getAllAdmin = async () =>
+  getPropertyList("p.is_deleted = 0", [], {
+    includeManageAccess: true,
+  });
 
 Property.getAdminById = async (id) =>
-  getPropertyDetail("p.id = ? AND p.is_deleted = 0", [id]);
+  getPropertyDetail("p.id = ? AND p.is_deleted = 0", [id], {
+    includeManageAccess: true,
+  });
 
 Property.getByHost = async (hostId) =>
-  getPropertyList("p.host_id = ? AND p.is_deleted = 0", [hostId]);
+  getPropertyList("p.host_id = ? AND p.is_deleted = 0", [hostId], {
+    includeManageAccess: true,
+  });
 
 Property.getHostById = async (id, hostId) =>
-  getPropertyDetail("p.id = ? AND p.host_id = ? AND p.is_deleted = 0", [id, hostId]);
+  getPropertyDetail("p.id = ? AND p.host_id = ? AND p.is_deleted = 0", [id, hostId], {
+    includeManageAccess: true,
+  });
 
 Property.create = async (payload) => {
+  const manageToken = createManageToken();
   const [result] = await db.promise().query(
     `INSERT INTO properties (
       host_id,
@@ -368,8 +409,11 @@ Property.create = async (payload) => {
       bathrooms,
       status,
       cover_image,
-      featured
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      featured,
+      manage_token,
+      manage_token_active,
+      manage_token_expires_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, NULL)`,
     [
       payload.hostId,
       payload.title,
@@ -385,10 +429,78 @@ Property.create = async (payload) => {
       payload.status || "pending",
       payload.coverImage || null,
       payload.featured ? 1 : 0,
+      manageToken,
     ],
   );
 
   return Number(result.insertId);
+};
+
+Property.regenerateManageToken = async (id, hostId = null) => {
+  const manageToken = createManageToken();
+  let sql = `UPDATE properties
+             SET manage_token = ?, manage_token_active = 1, manage_token_expires_at = NULL
+             WHERE id = ? AND is_deleted = 0`;
+  const params = [manageToken, id];
+
+  if (hostId !== null) {
+    sql += " AND host_id = ?";
+    params.push(hostId);
+  }
+
+  const [result] = await db.promise().query(sql, params);
+  if (!result.affectedRows) {
+    return null;
+  }
+
+  return manageToken;
+};
+
+Property.setManageTokenActive = async (id, isActive, hostId = null) => {
+  let sql = `UPDATE properties
+             SET manage_token_active = ?
+             WHERE id = ? AND is_deleted = 0`;
+  const params = [isActive ? 1 : 0, id];
+
+  if (hostId !== null) {
+    sql += " AND host_id = ?";
+    params.push(hostId);
+  }
+
+  const [result] = await db.promise().query(sql, params);
+  return result.affectedRows > 0;
+};
+
+Property.getQuickManageByToken = async (token) =>
+  getPropertyDetail(
+    `p.manage_token = ?
+     AND p.manage_token_active = 1
+     AND p.status = 'approved'
+     AND p.is_deleted = 0
+     AND (p.manage_token_expires_at IS NULL OR p.manage_token_expires_at > NOW())`,
+    [token],
+    { includeManageAccess: true },
+  );
+
+Property.getManagedUnavailableDateRanges = async (propertyId) => {
+  const [rows] = await db.promise().query(
+    `SELECT
+      DATE_FORMAT(check_in, '%Y-%m-%d') AS checkIn,
+      DATE_FORMAT(check_out, '%Y-%m-%d') AS checkOut,
+      status
+     FROM bookings
+     WHERE property_id = ?
+       AND status IN ('pending', 'confirmed')
+       AND check_out >= CURDATE()
+     ORDER BY check_in ASC`,
+    [propertyId],
+  );
+
+  return rows.map((row) => ({
+    checkIn: row.checkIn,
+    checkOut: row.checkOut,
+    status: row.status,
+  }));
 };
 
 Property.update = async (id, payload, hostId = null) => {

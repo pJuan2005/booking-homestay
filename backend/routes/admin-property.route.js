@@ -9,6 +9,8 @@ router.use(requireRoles("admin"));
 
 router.get("/", property.getAllPropertiesAdmin);
 router.get("/:id", property.getAdminPropertyById);
+router.post("/:id/manage-link/regenerate", property.regenerateAdminManageLink);
+router.put("/:id/manage-link/status", property.updateAdminManageLinkState);
 router.put(
   "/:id",
   uploadPropertyImages.fields([

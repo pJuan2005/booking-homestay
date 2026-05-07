@@ -53,9 +53,13 @@ function mapBookingRow(row) {
     propertyTitle: row.propertyTitle,
     propertyLocation: row.propertyLocation,
     propertyImage: buildVariantUrl(row.propertyImage, "thumb"),
-    guestId: Number(row.guestId),
+    guestId:
+      row.guestId === null || row.guestId === undefined
+        ? null
+        : Number(row.guestId),
     guestName: row.guestName,
     guestEmail: row.guestEmail,
+    guestPhone: row.guestPhone || "",
     hostId: Number(row.hostId),
     hostName: row.hostName,
     checkIn: formatDateOnly(row.checkIn),
@@ -64,6 +68,11 @@ function mapBookingRow(row) {
     guests: Number(row.guests || 0),
     totalPrice: Number(row.totalPrice || 0),
     status: row.status,
+    source: row.source || "guest_online",
+    createdBy:
+      row.createdBy === null || row.createdBy === undefined
+        ? null
+        : Number(row.createdBy),
     paymentMethod: row.paymentMethod || "bank_transfer",
     paymentReference: row.paymentReference,
     paymentStatus: row.paymentStatus || "unpaid",
@@ -75,6 +84,9 @@ function mapBookingRow(row) {
     rejectionReason: row.rejectionReason || "",
     hostNote: row.hostNote || "",
     checkinInstructions: row.checkinInstructions || "",
+    commissionRateApplied: Number(row.commissionRateApplied || 0),
+    commissionAmount: Number(row.commissionAmount || 0),
+    hostPayoutAmount: Number(row.hostPayoutAmount || 0),
     reviewId: row.reviewId ? Number(row.reviewId) : null,
     reviewRating: row.reviewRating ? Number(row.reviewRating) : null,
     reviewCreatedAt: row.reviewCreatedAt || null,
@@ -97,14 +109,17 @@ async function getBookingList(whereClause, params = []) {
       p.host_id AS hostId,
       host.full_name AS hostName,
       guest.id AS guestId,
-      guest.full_name AS guestName,
-      guest.email AS guestEmail,
+      COALESCE(guest.full_name, b.guest_name_snapshot, 'Walk-in Guest') AS guestName,
+      COALESCE(guest.email, '') AS guestEmail,
+      COALESCE(guest.phone, b.guest_phone_snapshot, '') AS guestPhone,
       b.check_in AS checkIn,
       b.check_out AS checkOut,
       COALESCE(b.nights, DATEDIFF(b.check_out, b.check_in)) AS nights,
       b.guests,
       b.total_price AS totalPrice,
       b.status,
+      COALESCE(b.source, 'guest_online') AS source,
+      b.created_by AS createdBy,
       COALESCE(b.payment_method, 'bank_transfer') AS paymentMethod,
       COALESCE(
         b.payment_reference,
@@ -126,13 +141,16 @@ async function getBookingList(whereClause, params = []) {
       b.rejection_reason AS rejectionReason,
       b.host_note AS hostNote,
       b.checkin_instructions AS checkinInstructions,
+      COALESCE(b.commission_rate_applied, 0) AS commissionRateApplied,
+      COALESCE(b.commission_amount, 0) AS commissionAmount,
+      COALESCE(b.host_payout_amount, 0) AS hostPayoutAmount,
       review.id AS reviewId,
       review.rating AS reviewRating,
       review.created_at AS reviewCreatedAt,
       b.created_at AS createdAt
      FROM bookings b
      JOIN properties p ON p.id = b.property_id
-     JOIN users guest ON guest.id = b.guest_id
+     LEFT JOIN users guest ON guest.id = b.guest_id
      JOIN users host ON host.id = p.host_id
      LEFT JOIN users reviewer ON reviewer.id = b.confirmed_by
      LEFT JOIN reviews review ON review.booking_id = b.id
@@ -197,23 +215,40 @@ Booking.create = async (payload) => {
     `INSERT INTO bookings (
       property_id,
       guest_id,
+      guest_name_snapshot,
+      guest_phone_snapshot,
       check_in,
       check_out,
       nights,
       guests,
       total_price,
       status,
+      source,
+      created_by,
       payment_method,
-      payment_status
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', 'bank_transfer', 'unpaid')`,
+      payment_status,
+      commission_rate_applied,
+      commission_amount,
+      host_payout_amount
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)` ,
     [
       payload.propertyId,
-      payload.guestId,
+      payload.guestId || null,
+      payload.guestNameSnapshot || null,
+      payload.guestPhoneSnapshot || null,
       payload.checkIn,
       payload.checkOut,
       payload.nights,
       payload.guests,
       payload.totalPrice,
+      payload.status || "pending",
+      payload.source || "guest_online",
+      payload.createdBy || null,
+      payload.paymentMethod || "bank_transfer",
+      payload.paymentStatus || "unpaid",
+      payload.commissionRateApplied || 0,
+      payload.commissionAmount || 0,
+      payload.hostPayoutAmount || 0,
     ],
   );
 
@@ -239,6 +274,9 @@ Booking.getGuestById = async (bookingId, guestId) =>
 
 Booking.getByHost = async (hostId) =>
   getBookingList("p.host_id = ?", [hostId]);
+
+Booking.getByProperty = async (propertyId) =>
+  getBookingList("b.property_id = ?", [propertyId]);
 
 Booking.getHostById = async (bookingId, hostId) =>
   getBookingDetail("b.id = ? AND p.host_id = ?", [bookingId, hostId]);

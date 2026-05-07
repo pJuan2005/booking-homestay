@@ -81,16 +81,23 @@ CREATE TABLE `bookings` (
   `id` int(11) NOT NULL,
   `booking_code` varchar(40) DEFAULT NULL,
   `property_id` int(11) NOT NULL,
-  `guest_id` int(11) NOT NULL,
+  `guest_id` int(11) DEFAULT NULL,
+  `guest_name_snapshot` varchar(120) DEFAULT NULL,
+  `guest_phone_snapshot` varchar(30) DEFAULT NULL,
   `check_in` date NOT NULL,
   `check_out` date NOT NULL,
   `nights` int(11) DEFAULT NULL,
   `guests` int(11) NOT NULL,
   `total_price` decimal(10,2) DEFAULT NULL,
   `status` enum('pending','confirmed','cancelled') DEFAULT 'pending',
+  `source` enum('guest_online','host_direct','admin_manual') NOT NULL DEFAULT 'guest_online',
+  `created_by` int(11) DEFAULT NULL,
   `payment_method` varchar(50) NOT NULL DEFAULT 'bank_transfer',
   `payment_reference` varchar(80) DEFAULT NULL,
   `payment_status` enum('unpaid','proof_uploaded','verified','rejected') NOT NULL DEFAULT 'unpaid',
+  `commission_rate_applied` decimal(6,4) NOT NULL DEFAULT 0.1000,
+  `commission_amount` decimal(10,2) NOT NULL DEFAULT 0.00,
+  `host_payout_amount` decimal(10,2) NOT NULL DEFAULT 0.00,
   `payment_proof_image` varchar(255) DEFAULT NULL,
   `payment_submitted_at` datetime DEFAULT NULL,
   `confirmed_by` int(11) DEFAULT NULL,
@@ -122,6 +129,9 @@ CREATE TABLE `properties` (
   `bathrooms` int(11) DEFAULT NULL,
   `status` enum('pending','approved','rejected') DEFAULT 'pending',
   `cover_image` varchar(255) DEFAULT NULL,
+  `manage_token` varchar(80) DEFAULT NULL,
+  `manage_token_active` tinyint(1) NOT NULL DEFAULT 1,
+  `manage_token_expires_at` datetime DEFAULT NULL,
   `is_deleted` tinyint(1) DEFAULT 0,
   `created_at` timestamp NOT NULL DEFAULT current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
@@ -226,6 +236,8 @@ ALTER TABLE `bookings`
   ADD UNIQUE KEY `idx_bookings_booking_code` (`booking_code`),
   ADD KEY `property_id` (`property_id`),
   ADD KEY `guest_id` (`guest_id`),
+  ADD KEY `idx_bookings_source` (`source`),
+  ADD KEY `idx_bookings_created_by` (`created_by`),
   ADD KEY `idx_bookings_confirmed_by` (`confirmed_by`);
 
 --
@@ -233,6 +245,7 @@ ALTER TABLE `bookings`
 --
 ALTER TABLE `properties`
   ADD PRIMARY KEY (`id`),
+  ADD UNIQUE KEY `idx_properties_manage_token` (`manage_token`),
   ADD KEY `host_id` (`host_id`);
 
 --
@@ -406,6 +419,8 @@ INSERT INTO amenities (id,name) VALUES
 
 INSERT INTO app_settings (setting_key, setting_value) VALUES
 ('usd_to_vnd_rate', '25000'),
+('online_commission_rate', '0.1'),
+('direct_commission_rate', '0.05'),
 ('platform_commission_rate', '0.1');
 
 INSERT INTO properties

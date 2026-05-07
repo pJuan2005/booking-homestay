@@ -3,7 +3,6 @@
 import { CalendarDays, Mail, MapPin, Shield } from "lucide-react";
 import { useAuth, getUserInitials } from "@/components/context/AuthContext";
 import { AccountSettingsPanel } from "@/components/shared/AccountSettingsPanel";
-import { PlatformSettingsPanel } from "@/components/shared/PlatformSettingsPanel";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 
 export default function AdminProfilePage() {
@@ -117,14 +116,11 @@ export default function AdminProfilePage() {
         </div>
 
         <div className="col-lg-8">
-          <div style={{ display: "grid", gap: 20 }}>
-            <AccountSettingsPanel
-              user={user}
-              profileTitle="Administrator Information"
-              passwordTitle="Change Password"
-            />
-            <PlatformSettingsPanel />
-          </div>
+          <AccountSettingsPanel
+            user={user}
+            profileTitle="Administrator Information"
+            passwordTitle="Change Password"
+          />
         </div>
       </div>
     </div>

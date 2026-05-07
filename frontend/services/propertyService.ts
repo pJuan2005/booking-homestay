@@ -38,6 +38,9 @@ export interface PropertySummary {
   hostName: string;
   reviews: number;
   rating: number;
+  manageToken?: string;
+  manageTokenActive?: boolean;
+  manageTokenExpiresAt?: string | null;
 }
 
 export interface PropertyReview {
@@ -77,6 +80,9 @@ function normalizePropertySummary(property: any): PropertySummary {
     hostName: property.hostName,
     reviews: Number(property.reviews || 0),
     rating: Number(property.rating || 0),
+    manageToken: property.manageToken || "",
+    manageTokenActive: Boolean(property.manageTokenActive),
+    manageTokenExpiresAt: property.manageTokenExpiresAt || null,
   };
 }
 
@@ -236,6 +242,25 @@ export async function deleteProperty(id: number) {
   });
 }
 
+export async function regenerateAdminManageLink(id: number) {
+  return apiRequest<{
+    message: string;
+    data: { id: number; manageToken: string; manageTokenActive: boolean };
+  }>(`/api/admin/properties/${id}/manage-link/regenerate`, {
+    method: "POST",
+  });
+}
+
+export async function updateAdminManageLinkState(id: number, isActive: boolean) {
+  return apiRequest<{
+    message: string;
+    data: { id: number; manageToken: string; manageTokenActive: boolean };
+  }>(`/api/admin/properties/${id}/manage-link/status`, {
+    method: "PUT",
+    body: JSON.stringify({ isActive }),
+  });
+}
+
 export async function getHostProperties(hostId?: number) {
   const query = typeof hostId === "number" ? `?hostId=${hostId}` : "";
   const data = await apiRequest<any[]>(`/api/host/properties${query}`);
@@ -291,4 +316,29 @@ export async function deleteHostProperty(id: number, hostId?: number) {
       method: "DELETE",
     },
   );
+}
+
+export async function regenerateHostManageLink(id: number, hostId?: number) {
+  const query = typeof hostId === "number" ? `?hostId=${hostId}` : "";
+  return apiRequest<{
+    message: string;
+    data: { id: number; manageToken: string; manageTokenActive: boolean };
+  }>(`/api/host/properties/${id}/manage-link/regenerate${query}`, {
+    method: "POST",
+  });
+}
+
+export async function updateHostManageLinkState(
+  id: number,
+  isActive: boolean,
+  hostId?: number,
+) {
+  const query = typeof hostId === "number" ? `?hostId=${hostId}` : "";
+  return apiRequest<{
+    message: string;
+    data: { id: number; manageToken: string; manageTokenActive: boolean };
+  }>(`/api/host/properties/${id}/manage-link/status${query}`, {
+    method: "PUT",
+    body: JSON.stringify({ isActive }),
+  });
 }

@@ -2,7 +2,16 @@
 
 import Image from "next/image";
 import { useEffect, useMemo, useState } from "react";
-import { Edit2, Eye, Filter, MapPin, Search, Star, Trash2 } from "lucide-react";
+import {
+  Edit2,
+  ExternalLink,
+  Eye,
+  Filter,
+  MapPin,
+  Search,
+  Star,
+  Trash2,
+} from "lucide-react";
 import Link from "next/link";
 import {
   deleteProperty,
@@ -100,19 +109,35 @@ export default function ManagePropertiesPage() {
   return (
     <div style={{ padding: "28px" }}>
       <div style={{ marginBottom: 24 }}>
-        <h1
+        <div
           style={{
-            fontWeight: 800,
-            color: "#1e293b",
-            marginBottom: 4,
-            fontSize: "1.5rem",
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "flex-start",
+            gap: 16,
+            flexWrap: "wrap",
           }}
         >
-          Manage Properties
-        </h1>
-        <p style={{ color: "#64748b", margin: 0 }}>
-          Monitor every property available on the platform.
-        </p>
+          <div>
+            <h1
+              style={{
+                fontWeight: 800,
+                color: "#1e293b",
+                marginBottom: 4,
+                fontSize: "1.5rem",
+              }}
+            >
+              Manage Properties
+            </h1>
+            <p style={{ color: "#64748b", margin: 0 }}>
+              Monitor every property available on the platform.
+            </p>
+          </div>
+
+          <Link href="/admin/quick-manage-links">
+            <button className="btn-outline-hs">Open Quick Link Manager</button>
+          </Link>
+        </div>
       </div>
 
       {notice && (
@@ -408,6 +433,29 @@ export default function ManagePropertiesPage() {
                             <Edit2 size={13} color="#2563eb" />
                           </button>
                         </Link>
+                        {property.status === "approved" &&
+                          property.manageToken &&
+                          property.manageTokenActive && (
+                          <Link
+                            href={`/quick-manage/${property.manageToken}`}
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            <button
+                              style={{
+                                padding: "6px 9px",
+                                borderRadius: 7,
+                                border: "1px solid #bfdbfe",
+                                background: "#eff6ff",
+                                cursor: "pointer",
+                                display: "flex",
+                                alignItems: "center",
+                              }}
+                            >
+                              <ExternalLink size={13} color="#2563eb" />
+                            </button>
+                          </Link>
+                        )}
                         {deleteConfirm === property.id ? (
                           <div style={{ display: "flex", gap: 4 }}>
                             <button
