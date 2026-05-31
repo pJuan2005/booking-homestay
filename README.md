@@ -1,195 +1,272 @@
-# Homestay Booking & Management Platform
+# 🏠 Homestay Booking & Management Platform
 
-A full-stack web application for booking and managing homestays.
+<p align="center">
+  <img src="https://img.shields.io/badge/Next.js-Frontend-black" />
+  <img src="https://img.shields.io/badge/React-TypeScript-blue" />
+  <img src="https://img.shields.io/badge/Node.js-Backend-green" />
+  <img src="https://img.shields.io/badge/Express.js-REST_API-lightgrey" />
+  <img src="https://img.shields.io/badge/MySQL-Database-orange" />
+</p>
 
-Built with modern web technologies including Next.js, React.js, Node.js, Express.js and MySQL.
-
----
-
-## Project Overview
-
-This system allows:
-
-- Guests to search and book homestays online
-- Hosts to manage properties and reservations
-- Administrators to manage users, properties and platform settings
-
-The platform aims to simplify homestay operations while providing a convenient booking experience for travelers.
+<p align="center">
+  <strong>Full-Stack Homestay Reservation Platform</strong><br>
+  Built with Next.js, React.js, Node.js, Express.js and MySQL
+</p>
 
 ---
 
-## Features
+# 📖 Overview
 
-### Guest Features
+Homestay Booking & Management Platform is a full-stack web application that connects travelers with property owners through a modern online reservation system.
 
-- User Registration
-- Login / Logout
-- Search Homestays
-- Filter by:
-  - Location
-  - Price
-  - Guest Capacity
-  - Stay Duration
-- View Homestay Details
-- Online Booking
-- Booking History
-- Payment Submission
-- Review & Rating
-- Real-time Chat Support
-- Profile Management
+The platform provides dedicated workspaces for Guests, Hosts, and Administrators, supporting property listing management, booking workflows, payment verification, reporting, and platform moderation.
 
 ---
 
-### Host Features
+# ✨ Key Features
 
-- Host Dashboard
-- Manage Homestays
-- Create Homestay Listings
-- Upload Property Images
-- Manage Bookings
-- Confirm / Reject Reservations
-- Manage Quick Booking Links
-- View Revenue Statistics
-- Customer Communication
+## 👤 Guest Portal
 
----
+* User Registration & Authentication
+* Homestay Search & Discovery
+* Advanced Filtering System
+* Online Booking
+* Booking History
+* Payment Proof Submission
+* Reviews & Ratings
+* Real-time Chat Support
+* Profile Management
 
-### Admin Features
+## 🏡 Host Portal
 
-- Admin Dashboard
-- User Management
-- Homestay Moderation
-- Booking Monitoring
-- System Configuration
-- Platform Analytics
-- Reports & Statistics
+* Host Dashboard
+* Property Management
+* Property Listing Creation
+* Image Upload Management
+* Reservation Processing
+* Revenue Monitoring
+* Quick Booking Links
+* Guest Communication
 
----
+## 🛡 Admin Portal
 
-## Tech Stack
-
-### Frontend
-
-- Next.js
-- React.js
-- TypeScript
-- TailwindCSS
-
-### Backend
-
-- Node.js
-- Express.js
-
-### Database
-
-- MySQL
-
-### Authentication
-
-- JWT Authentication
-- Role-Based Access Control
-
-### Other Tools
-
-- Git
-- GitHub
-- REST API
+* Platform Dashboard
+* User Management
+* Host Management
+* Property Moderation
+* Booking Monitoring
+* Revenue Analytics
+* Reports & Statistics
+* Platform Configuration
 
 ---
 
-## System Roles
+# 🚀 Technology Stack
 
-| Role | Description |
-|--------|-------------|
-| Guest | Search and book homestays |
-| Host | Manage homestays and bookings |
-| Admin | Manage entire platform |
+## Frontend
 
----
+* Next.js
+* React.js
+* TypeScript
+* Tailwind CSS
 
-## Main Modules
+## Backend
 
-### Authentication Module
+* Node.js
+* Express.js
+* RESTful API
 
-- Register
-- Login
-- Session Management
-- Authorization
+## Database
 
-### Property Module
+* MySQL
 
-- Property Management
-- Amenities
-- Property Images
-- Availability Tracking
+## Security
 
-### Booking Module
+* JWT Authentication
+* Role-Based Access Control (RBAC)
 
-- Booking Creation
-- Booking Confirmation
-- Booking Cancellation
-- Payment Verification
+## Development Tools
 
-### Review Module
-
-- Ratings
-- Reviews
-- Average Score Calculation
-
-### Chat Module
-
-- Guest ↔ Host Communication
-
-### Administration Module
-
-- User Management
-- Property Approval
-- Platform Settings
-- Dashboard Analytics
+* Git
+* GitHub
+* Postman
+* Visual Studio Code
 
 ---
 
-## Database Design
+# 👥 System Roles
 
-Main Entities:
-
-- Users
-- Properties
-- Bookings
-- Reviews
-- Amenities
-- PropertyImages
-- BookingConversations
-- BookingMessages
-- AppSettings
+| Role  | Responsibility                     |
+| ----- | ---------------------------------- |
+| Guest | Search and book homestays          |
+| Host  | Manage properties and reservations |
+| Admin | Manage platform operations         |
 
 ---
 
-## Screenshots
+# 🏗 System Architecture
 
-### Home Page
-
-![Home](./screenshots/home.png)
-
-### Property Details
-
-![Details](./screenshots/details.png)
-
-### Booking System
-
-![Booking](./screenshots/booking.png)
-
-### Host Dashboard
-
-![Host Dashboard](./screenshots/host-dashboard.png)
-
-### Admin Dashboard
-
-![Admin Dashboard](./screenshots/admin-dashboard.png)
+```text
+Client (Next.js + React)
+            │
+            ▼
+      REST API Server
+       (Express.js)
+            │
+            ▼
+          MySQL
+```
 
 ---
 
-## Installation
+# 📸 System Screenshots
+
+## 🏠 Home Page
+
+Landing page allowing users to search homestays by location, date and guest capacity.
+
+<p align="center">
+  <img src="./images/home.png" width="95%" alt="Home Page"/>
+</p>
+
+---
+
+## 🔍 Explore Homestays
+
+Browse available properties with advanced filters including city, property type and pricing.
+
+<p align="center">
+  <img src="./images/explore.png" width="95%" alt="Explore Homestays"/>
+</p>
+
+---
+
+## 👤 Guest Dashboard
+
+Guests can manage bookings, payments, reviews and personal profile information.
+
+<p align="center">
+  <img src="./images/guest-dashboard.png" width="95%" alt="Guest Dashboard"/>
+</p>
+
+---
+
+## 🏡 Host Dashboard
+
+Hosts can monitor bookings, revenue and property performance in one place.
+
+<p align="center">
+  <img src="./images/host-dashboard.png" width="95%" alt="Host Dashboard"/>
+</p>
+
+---
+
+## 🏘 Property Management
+
+Hosts can create, update and manage homestay listings.
+
+<p align="center">
+  <img src="./images/property-management.png" width="95%" alt="Property Management"/>
+</p>
+
+---
+
+## ⚡ Quick Booking Links
+
+Generate and manage direct booking links for approved properties.
+
+<p align="center">
+  <img src="./images/quick-links.png" width="95%" alt="Quick Links"/>
+</p>
+
+---
+
+## 🛡 Admin Dashboard
+
+Platform-wide statistics including users, bookings, revenue and property metrics.
+
+<p align="center">
+  <img src="./images/admin-dashboard.png" width="95%" alt="Admin Dashboard"/>
+</p>
+
+---
+
+## ✅ Property Approval Workflow
+
+Administrators review and approve property submissions from hosts.
+
+<p align="center">
+  <img src="./images/property-approval.png" width="95%" alt="Property Approval"/>
+</p>
+
+---
+
+## 📅 Booking Management
+
+Centralized booking management including payment verification and reservation tracking.
+
+<p align="center">
+  <img src="./images/booking-management.png" width="95%" alt="Booking Management"/>
+</p>
+
+---
+
+## 📈 Reports & Analytics
+
+Revenue reports, booking trends and platform performance analytics.
+
+<p align="center">
+  <img src="./images/reports.png" width="95%" alt="Reports & Analytics"/>
+</p>
+
+---
+
+# 🗄 Database Design
+
+Core entities:
+
+* Users
+* Properties
+* Bookings
+* Reviews
+* Amenities
+* Property Images
+* Conversations
+* Messages
+* App Settings
+
+---
+
+# 👨‍💻 My Contributions
+
+As Full-Stack Developer, I participated in:
+
+* Database Design
+* REST API Development
+* Authentication & Authorization
+* Property Management Module
+* Booking Workflow
+* Payment Verification
+* Dashboard Development
+* Admin Management Features
+* UI/UX Implementation
+
+---
+
+# 📊 Project Highlights
+
+* Multi-role System (Guest / Host / Admin)
+* Property Approval Workflow
+* Booking & Reservation Management
+* Revenue Analytics Dashboard
+* Quick Booking Link System
+* Responsive UI Design
+* JWT Authentication
+* RESTful API Architecture
+
+---
+
+# ⚙️ Installation
 
 ### Clone Repository
 
@@ -197,25 +274,23 @@ Main Entities:
 git clone https://github.com/pJuan2005/booking-homestay.git
 ```
 
-### Install Frontend
+### Frontend
 
 ```bash
-cd client
+cd frontend
 npm install
 npm run dev
 ```
 
-### Install Backend
+### Backend
 
 ```bash
-cd server
+cd backend
 npm install
 npm run dev
 ```
 
-### Database
-
-Configure:
+### Environment Variables
 
 ```env
 DB_HOST=
@@ -223,39 +298,33 @@ DB_PORT=
 DB_USER=
 DB_PASSWORD=
 DB_NAME=
+JWT_SECRET=
 ```
 
 ---
 
-## Architecture
+# 🎓 Academic Information
 
-```text
-Frontend (Next.js)
-        |
-        v
- REST API (Express.js)
-        |
-        v
-     MySQL
-```
+Software Development Course Project
+
+Hung Yen University of Technology and Education
+
+Bachelor of Information Technology (Software Engineering)
 
 ---
 
-## Future Improvements
+# 📬 Contact
 
-- Online Payment Gateway
-- Google Maps Integration
-- Email Notifications
-- Mobile Application
-- Recommendation System
-- AI-powered Search
+### Pham Xuan Chuan
+
+📧 [phamchuan2608@gmail.com](mailto:phamchuan2608@gmail.com)
+
+🔗 LinkedIn: https://linkedin.com/in/phamxuanchuan
+
+💻 GitHub: https://github.com/pJuan2005
 
 ---
 
-## Author
-
-Pham Xuan Chuan
-
-Software Engineering Student
-
-ReactJS | NextJS | NodeJS | ExpressJS | TypeScript
+<p align="center">
+⭐ If you found this project interesting, feel free to give it a star.
+</p>
